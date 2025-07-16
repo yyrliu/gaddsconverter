@@ -113,7 +113,7 @@ See GADDS User Manual for details."""
         ax.set_xticks([])
         ax.set_yticks([])
         ax.autoscale(False)
-        plt.colorbar(mappable=im, ax=ax)
+        self.ui.plotOriginal.figure.colorbar(mappable=im, ax=ax)
         self.plot_gridlines()
         self.ui.plotOriginal.canvas.draw()
 
@@ -149,7 +149,7 @@ See GADDS User Manual for details."""
         ax.set_xlabel(r'$2\theta$ (°)')
         ax.set_ylabel(r'$\gamma$ (°)')
         ax.autoscale(False)
-        plt.colorbar(mappable=im, ax=ax)
+        self.ui.plotConverted.figure.colorbar(mappable=im, ax=ax)
         ax.grid(True, color='#aaaaaa', ls=':', lw=0.5)
         self.ui.plotConverted.canvas.draw()
 
@@ -162,7 +162,9 @@ See GADDS User Manual for details."""
         ls = self.ui.cbGridStyle.currentText()
         color = self.ui.leGridColor.text()
         if clear_previous:
-            del ax.lines[:]
+            # Clear all existing lines
+            for line in ax.lines[:]:
+                line.remove()
         if self.ui.cbGrid2th.isChecked():
             delta_deg = self.ui.sbGrid2th.value()
             for angle_deg in np.arange(delta_deg, 180, delta_deg):

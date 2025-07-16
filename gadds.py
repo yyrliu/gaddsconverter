@@ -223,7 +223,9 @@ class AreaDetectorImage(object):
             self.distance = distanc + cmtogrid
         else:
             pass
-        self.relim()
+        # Only call relim if image data is available
+        if self.image.data is not None:
+            self.relim()
 
 
 if __name__ == '__main__':
