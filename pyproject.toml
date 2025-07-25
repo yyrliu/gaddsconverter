@@ -1,0 +1,16 @@
+[project]
+name = "gaddsconverter"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fabio>=2024.9.0",
+    "igorwriter>=0.6.1",
+    "ipykernel>=6.30.0",
+    "matplotlib>=3.10.3",
+    "numpy>=2.3.2",
+    "scipy>=1.16.0",
+    "pyqt5==5.15.11",
+    "pyqt5-qt5==5.15.2",
+]

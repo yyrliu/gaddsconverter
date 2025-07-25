@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-print('application loading. please wait.')
 import traceback
 import sys
 import gzip
@@ -13,6 +12,8 @@ import matplotlib.colors as colors
 from igorwriter import IgorWave5 as IgorBinaryWave
 from gadds import AreaDetectorImage, BrukerImage
 from ui_mainwindow import Ui_MainWindow
+
+print('application loading. please wait.')
 
 logger = getLogger(__name__)
 
