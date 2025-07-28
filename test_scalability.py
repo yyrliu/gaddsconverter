@@ -136,7 +136,7 @@ def test_merger_scalability():
             merger = AreaDetectorMerger(detectors)
             
             # Print detector info
-            print(f"\nDetector configuration:")
+            print("\nDetector configuration:")
             for i, det in enumerate(detectors):
                 twoth_range = (det.indexes[1].min(), det.indexes[1].max())
                 gamma_range = (det.indexes[0].min(), det.indexes[0].max())
@@ -144,12 +144,12 @@ def test_merger_scalability():
                       f"γ=[{gamma_range[0]:.1f}, {gamma_range[1]:.1f}]°")
             
             # Test data-driven merging
-            print(f"\nTesting data-driven merging...")
+            print("\nTesting data-driven merging...")
             merged_data, weight_grid, normalized_data = merger.merge_data_driven(verbose=True)
             
             # Analyze weight distribution
             unique_weights, counts = np.unique(weight_grid[weight_grid > 0], return_counts=True)
-            print(f"\nWeight distribution:")
+            print("\nWeight distribution:")
             for weight, count in zip(unique_weights, counts):
                 print(f"  Weight {weight:.0f}: {count:,} pixels")
             
@@ -157,13 +157,13 @@ def test_merger_scalability():
             print(f"  Maximum weight: {max_weight:.0f} (max possible: {n_detectors})")
             
             # Test convex hull merging
-            print(f"\nTesting convex hull merging...")
+            print("\nTesting convex hull merging...")
             try:
                 _, hull_weight_grid, hull_normalized_data = merger.merge_convex_hull(verbose=True)
                 
                 # Check if convex hull worked properly
                 hull_unique_weights, hull_counts = np.unique(hull_weight_grid[hull_weight_grid > 0], return_counts=True)
-                print(f"Convex hull weight distribution:")
+                print("Convex hull weight distribution:")
                 for weight, count in zip(hull_unique_weights, hull_counts):
                     print(f"  Weight {weight:.0f}: {count:,} pixels")
                 
@@ -227,7 +227,7 @@ def analyze_weight_logic():
     merged_data, weight_grid, normalized_data = merger.merge_data_driven(verbose=False)
     
     # Analyze overlap patterns
-    print(f"\nOverlap analysis for 3 detectors:")
+    print("\nOverlap analysis for 3 detectors:")
     
     # Find different overlap regions
     no_coverage = np.sum(weight_grid == 0)
@@ -243,7 +243,7 @@ def analyze_weight_logic():
     print(f"  Three detectors overlap: {triple_overlap:,} pixels ({100*triple_overlap/total_pixels:.1f}%)")
     
     # Test convex hull limitation
-    print(f"\nConvex hull method limitation:")
+    print("\nConvex hull method limitation:")
     print(f"  Current method only considers weight=2 regions: {dual_overlap:,} pixels")
     print(f"  But with 3 detectors, we also have weight=3 regions: {triple_overlap:,} pixels")
     print(f"  Total overlap regions: {dual_overlap + triple_overlap:,} pixels")

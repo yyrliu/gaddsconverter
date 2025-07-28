@@ -10,12 +10,10 @@ This module fixes the limitations found in the original implementation:
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import ConvexHull
 from matplotlib.path import Path
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Dict, Any
 from gadds import AreaDetectorImage
 
 
@@ -434,7 +432,7 @@ def test_improved_merger():
         # Get detailed metrics
         metrics = merger.get_detailed_quality_metrics()
         
-        print(f"\nDetailed Quality Metrics:")
+        print("\nDetailed Quality Metrics:")
         for key, value in metrics.items():
             if isinstance(value, float):
                 if 'pct' in key or 'factor' in key:

@@ -6,7 +6,7 @@ from logging import getLogger
 import fabio
 import numpy as np
 from fabio.brukerimage import BrukerImage
-from numpy import sin, cos, tan, arcsin, arccos, arctan
+from numpy import sin, cos, tan, arccos
 from scipy.interpolate import RegularGridInterpolator
 
 logger = getLogger(__name__)
@@ -27,7 +27,7 @@ DETTYPE = {
     'CCD-PXL-LDI': (83.333, 0.0),
 }
 
-if not (b'FORMAT :100', 'bruker100') in fabio.openimage.MAGIC_NUMBERS:
+if (b'FORMAT :100', 'bruker100') not in fabio.openimage.MAGIC_NUMBERS:
     fabio.openimage.MAGIC_NUMBERS.append((b'FORMAT :100', 'bruker100'))
 
 
@@ -234,7 +234,6 @@ class AreaDetectorImage(object):
 
 if __name__ == '__main__':
     # usage example
-    import matplotlib.colors as colors
     import matplotlib.pyplot as plt
     import sys
     try:
