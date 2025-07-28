@@ -9,15 +9,10 @@ class AreaDetectorImageConverter(AreaDetectorImage):
     Extended AreaDetectorImage class that supports reverse conversion from 2θ-γ space back to detector image.
     """
     
-    def __init__(self, image=None):
-        """
-        Initialize the converter with an optional image.
-        
-        :param image: filename, file-like, or fabio image object (optional)
-        """
-        super().__init__(image)
-        if image:
-            self.detector_shape = (self.image.data.shape[-1], self.image.data.shape[-2])  # Store original detector shape for reverse conversion
+    def relim(self):
+        if self.image.data is None:
+            raise ValueError('Cannot set limits because image data is not available.')
+        return super().relim()  # Call the original relim to set initial limits
         
     def set_detector_parameters(self, alpha_rad, distance_cm, center_xy, density_xy, 
                                detector_shape, scale=1, offset=0):
@@ -39,14 +34,6 @@ class AreaDetectorImageConverter(AreaDetectorImage):
         self.detector_shape = detector_shape
         self.scale = scale
         self.offset = offset
-        
-        # Create a dummy image with the specified shape for calculations
-        if self.image.data is None:
-            self.image.data = np.zeros(detector_shape, dtype=np.float32)
-        
-        self.indexes = (np.array([]), np.array([]))
-
-        self.relim()
 
     def set_converted_data_with_coordinates(self, data_converted, gamma_coords, twoth_coords):
         """
@@ -72,29 +59,34 @@ class AreaDetectorImageConverter(AreaDetectorImage):
         if n_col is None:
             n_col = self.data_converted.shape[-1]  # Default to original twoth dimension
 
-        # KEY FIX: Create pixel grid that covers the SAME detector area
-        # but with different sampling density
-        
-        # Get the ORIGINAL detector dimensions to preserve field of view
-        original_rows = self.data_converted.shape[-2]
-        original_cols = self.data_converted.shape[-1]
-        
-        # Create sequences that span the SAME range as original detector
-        # but with custom resolution
-        seq_row = np.linspace(0, original_rows-1, n_row)
-        seq_col = np.linspace(0, original_cols-1, n_col)
+        seq_row, seq_col = np.arange(n_row), np.arange(n_col)
         
         # Convert these to angular coordinates (preserves full FOV)
-        new_twoth, new_gamma = self.rowcol_to_angles(*np.meshgrid(seq_row, seq_col, indexing='ij'))
-        
+        new_twoth, new_gamma = self.rowcol_to_angles(*np.meshgrid(seq_row, seq_col, indexing='ij'), detector_shape=(self.detector_shape))
         # Get coordinate arrays from indexes (already in degrees)
-        seq_gamma = np.deg2rad(self.indexes[0])  # gamma coordinates converted to radians
-        seq_twoth = np.deg2rad(self.indexes[1])  # 2theta coordinates converted to radians
+        gamma_deg, twoth_deg = self.indexes
+
+        # Convert to radians for interpolation
+        seq_gamma, seq_twoth = np.deg2rad(gamma_deg), np.deg2rad(twoth_deg)
+
+        
+        # Log coordinate ranges for debugging
+        if hasattr(self, 'verbose') and self.verbose:
+            new_twoth_deg = np.rad2deg(new_twoth)
+            new_gamma_deg = np.rad2deg(new_gamma)
+            print("Coordinate ranges (degrees):")
+            print(f"  New 2theta: [{new_twoth_deg.min():.2f}, {new_twoth_deg.max():.2f}]")
+            print(f"  New gamma: [{new_gamma_deg.min():.2f}, {new_gamma_deg.max():.2f}]")
+            print(f"  Original 2theta: [{twoth_deg.min():.2f}, {twoth_deg.max():.2f}]")
+            print(f"  Original gamma: [{gamma_deg.min():.2f}, {gamma_deg.max():.2f}]")
+        
         
         f = RegularGridInterpolator(
             (seq_gamma, seq_twoth),
             self.data_converted,
             method=method,
+            bounds_error=False,
+            fill_value=0
         )
         
         new = f(np.c_[new_gamma.ravel(), new_twoth.ravel()]).reshape((n_row, n_col)).astype(self.data_converted.dtype)

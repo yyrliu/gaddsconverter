@@ -78,14 +78,15 @@ class AreaDetectorImage(object):
 
         return twoth, gamma
 
-    def rowcol_to_angles(self, row, col):
+    def rowcol_to_angles(self, row, col, detector_shape=None):
         # row ↔ y, col ↔ x
         dX, dY = self.densityXY
         cX, cY = self.centerXY
-        if self.image is not None:
-            nX, nY = self.image.dim1, self.image.dim2
+        if detector_shape is not None:
+            print("Warning: No image data available, using detector_shape for dimensions.")
+            nY, nX = self.detector_shape
         else:
-            nX, nY = self.detector_shape
+            nX, nY = self.image.dim1, self.image.dim2
         x, y = (col - cX)/dX, -(row-(nY-cY))/dY
         return self.xy_to_angles(x, y)
 
@@ -120,10 +121,7 @@ class AreaDetectorImage(object):
                 x * self.densityXY[0] + self.centerXY[0])
 
     def relim(self):
-        if self.image is not None:
-            rr, cc = np.indices((self.image.shape[-2], self.image.shape[-1]))
-        else:
-            rr, cc = np.indices(self.detector_shape)
+        rr, cc = np.indices((self.image.shape[-2], self.image.shape[-1]))
         twoth, gamma = self.rowcol_to_angles(rr, cc)
         if twoth.size > 0 and gamma.size > 0:
             self.limits = (np.min(twoth), np.max(twoth), np.min(gamma), np.max(gamma))
