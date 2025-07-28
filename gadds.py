@@ -82,7 +82,10 @@ class AreaDetectorImage(object):
         # row ↔ y, col ↔ x
         dX, dY = self.densityXY
         cX, cY = self.centerXY
-        nX, nY = self.image.dim1, self.image.dim2
+        if self.image is not None:
+            nX, nY = self.image.dim1, self.image.dim2
+        else:
+            nX, nY = self.detector_shape
         x, y = (col - cX)/dX, -(row-(nY-cY))/dY
         return self.xy_to_angles(x, y)
 
@@ -117,7 +120,10 @@ class AreaDetectorImage(object):
                 x * self.densityXY[0] + self.centerXY[0])
 
     def relim(self):
-        rr, cc = np.indices((self.image.shape[-2], self.image.shape[-1]))
+        if self.image is not None:
+            rr, cc = np.indices((self.image.shape[-2], self.image.shape[-1]))
+        else:
+            rr, cc = np.indices(self.detector_shape)
         twoth, gamma = self.rowcol_to_angles(rr, cc)
         if twoth.size > 0 and gamma.size > 0:
             self.limits = (np.min(twoth), np.max(twoth), np.min(gamma), np.max(gamma))
