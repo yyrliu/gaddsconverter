@@ -54,7 +54,7 @@ class AreaDetectorImage(object):
         self.limits = (np.nan, np.nan, np.nan, np.nan)  # min2θ, max2θ, minγ, maxγ
         self.data_converted = np.ndarray((0, 0), dtype=int)
         self.indexes = (np.arange(0), np.arange(0))
-        self.goniometer_poses = (np.nan, np.nan, np.nan, np.nan)  # x, y, z, aux (unit: mm)
+        self.goniometer_pos = (np.nan, np.nan, np.nan, np.nan)  # x, y, z, aux (unit: mm)
         self.load_headers()
 
     def xy_to_angles(self, x, y):
@@ -196,7 +196,7 @@ class AreaDetectorImage(object):
             diffractometer_angles = [float(angles) for angles in image.header['ANGLES'].split()]
             self.alpha, _, _, self.chi = np.deg2rad(diffractometer_angles)
 
-            self.goniometer_poses = image.image.header['AXES2'].split()
+            self.goniometer_pos = tuple(float(x) for x in image.header['AXES2'].split())
 
             # CENTER
             # ver 86: two values, x and y, are recorded.
