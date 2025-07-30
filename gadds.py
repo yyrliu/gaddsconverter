@@ -45,6 +45,7 @@ class AreaDetectorImage(object):
                 image.data = image.data.astype(np.min_scalar_type(np.max(image.data)))
         self.image = image
         self.alpha = np.nan  # 2-theta value at the center of the detector (unit: radian)
+        self.chi = np.nan  # Chi angle (unit: radian)
         self.distance = np.nan  # Distance from sample to detector plane (unit: cm)
         self.densityXY = (np.nan, np.nan)  # Number of pixels per unit length (cm)
         self.centerXY = (np.nan, np.nan)  # x, y coordinates of the detector center (unit: pixels).
@@ -53,6 +54,7 @@ class AreaDetectorImage(object):
         self.limits = (np.nan, np.nan, np.nan, np.nan)  # min2θ, max2θ, minγ, maxγ
         self.data_converted = np.ndarray((0, 0), dtype=int)
         self.indexes = (np.arange(0), np.arange(0))
+        self.goniometer_poses = (np.nan, np.nan, np.nan, np.nan)  # x, y, z, aux (unit: mm)
         self.load_headers()
 
     def xy_to_angles(self, x, y):
@@ -189,7 +191,12 @@ class AreaDetectorImage(object):
             """
             if 'UNWARPED' not in image.header['TYPE']:
                 logger.warning('This frame has NOT been UNWARPED (corrected), and may contain some error.', stack_info=True)
-            self.alpha = np.deg2rad(float(image.header['ANGLES'].split()[0]))
+
+            # In order: 2theta, omega, phi, chi
+            diffractometer_angles = [float(angles) for angles in image.header['ANGLES'].split()]
+            self.alpha, _, _, self.chi = np.deg2rad(diffractometer_angles)
+
+            self.goniometer_poses = image.image.header['AXES2'].split()
 
             # CENTER
             # ver 86: two values, x and y, are recorded.
