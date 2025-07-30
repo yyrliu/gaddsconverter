@@ -13,4 +13,5 @@ dependencies = [
     "scipy>=1.16.0",
     "pyqt5==5.15.11",
     "pyqt5-qt5==5.15.2",
+    "ipympl>=0.9.7",
 ]
