@@ -64,6 +64,14 @@ class AreaDetectorMerger:
         self.convex_hull_normalized_data = None
         self.hull_points = None
         self.hull_area = None
+
+        # Safe guards for untested configurations
+        if len(area_detectors) > 2:
+            raise NotImplementedError("Only tested with 2 detectors so far, for more than 2 detectors, please only use the data-driven method.")
+        
+        detector_chis = [detector.chi for detector in area_detectors]
+        if not detector_chis.count(detector_chis[0]) == len(detector_chis):
+            raise NotImplementedError("All detectors must have the same chi angle for merging.")
         
         self._setup_common_grid()
     
@@ -714,7 +722,7 @@ Vertices: {metrics['hull_vertices']}
 
 
 def load_and_merge_detectors(gfrm_files: List[str], 
-                           method: str = 'both',
+                           method: str = 'data_driven',
                            verbose: bool = True) -> AreaDetectorMerger:
     """
     Convenience function to load GFRM files and merge them.
@@ -734,7 +742,7 @@ def load_and_merge_detectors(gfrm_files: List[str],
     for i, area_detector in enumerate(area_detectors):
         if verbose:
             print(f"Converting detector {i} to 2θ-γ space...")
-        area_detector.convert(n_twoth=512, n_gamma=512)
+        area_detector.convert()
     
     # Create merger and run merging
     merger = AreaDetectorMerger(area_detectors)
