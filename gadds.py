@@ -241,40 +241,35 @@ class AreaDetectorImage(object):
     def integrate(self, twotheta_range, gamma_range, mode='2theta'):
         """
         Integrate the image data within specified 2θ and γ angular ranges.
-        This method sums the converted image data over the specified ranges of 2θ (two-theta) and γ (gamma) angles.
+
+        Sums the converted image data over the specified ranges of 2θ (two-theta) and γ (gamma) angles.
         The integration can be performed along either the 2θ or γ axis, as specified by the `mode` parameter.
 
         Parameters
         ----------
         twotheta_range : tuple of float
-            The (min, max) range of 2θ angles in degrees over which to integrate.
+            (min, max) range of 2θ angles in degrees to integrate over.
         gamma_range : tuple of float
-            The (min, max) range of γ angles in degrees over which to integrate.
+            (min, max) range of γ angles in degrees to integrate over.
         mode : {'2theta', 'gamma'}, optional
-            The axis along which to integrate:
-                - '2theta': Integrate over γ, returning intensity as a function of 2θ.
-                - 'gamma': Integrate over 2θ, returning intensity as a function of γ.
+            Axis along which to integrate:
+            - '2theta': Integrate over γ, returning intensity as a function of 2θ.
+            - 'gamma': Integrate over 2θ, returning intensity as a function of γ.
             Default is '2theta'.
-        
+
         Returns
         -------
-        intensity_slice : numpy.ndarray
-            The integrated intensity values along the selected axis.
-        int_borders : tuple of numpy.ndarray
-            Tuple containing arrays of coordinates for the integration borders:
-                (twoth_lower_border, twoth_upper_border, gamma_lower_border, gamma_upper_border),
-            where each border is an array of (row, col) coordinates corresponding to the edges of the integrated region.
+        (int_index, intensity_slice): tuple(numpy.ndarray, numpy.ndarray) 
+            - int_index: 1D numpy array of angular values (in degrees) along the integrated axis.
+            - intensity_slice: 1D numpy array of integrated intensity values.
+            
+        int_borders: numpy.ndarray
+            array of (x, y) coordinates for the integration borders, ordered clockwise. Starts from the upper right corner with respect to the detector image.
 
         Raises
         ------
         ValueError
             If the specified angular ranges are outside the image limits or if the data has not been converted.
-
-        Notes
-        -----
-        - The method assumes that `self.data_converted` contains the processed image data and that `self.indexes`
-          provides the mapping from angular values to data indices.
-        - The method requires that the data has been converted prior to integration.
 
         """
 
@@ -291,27 +286,35 @@ class AreaDetectorImage(object):
             raise ValueError('Specified range is outside the limits of the image.')
 
         gamma_mask = (self.indexes[0] >= gamma_range[0]) & (self.indexes[0] <= gamma_range[1])
-        twoth_mask = (self.indexes[1] >=  twotheta_range[0]) & (self.indexes[1] <= twotheta_range[1])
+        twoth_mask = (self.indexes[1] >= twotheta_range[0]) & (self.indexes[1] <= twotheta_range[1])
 
         if mode == '2theta':
             sum_axis = 0
+            int_index = self.indexes[1][twoth_mask]
         elif mode == 'gamma':
             sum_axis = 1
+            int_index = self.indexes[0][gamma_mask]
         else:
             raise ValueError('Unknown mode: %s' % mode)
         
         intensity_slice = np.sum(self.data_converted[gamma_mask, :][:, twoth_mask], axis=sum_axis)
 
         int_border_step = np.deg2rad(0.1)
+        # Create borders for the integration region, clockwise starting from the upper right corner with respect to the detector image.
         twoth_lower_border = self.angles_to_rowcol(twotheta_in_rad[0], np.arange(gamma_in_rad[0], gamma_in_rad[1], int_border_step))
-        twoth_upper_border = self.angles_to_rowcol(twotheta_in_rad[1], np.arange(gamma_in_rad[0], gamma_in_rad[1], int_border_step))
-        gamma_lower_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[0], twotheta_in_rad[1], int_border_step), gamma_in_rad[0])
         gamma_upper_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[0], twotheta_in_rad[1], int_border_step), gamma_in_rad[1])
-        
+        twoth_upper_border = self.angles_to_rowcol(twotheta_in_rad[1], np.arange(gamma_in_rad[1], gamma_in_rad[0], -int_border_step))
+        gamma_lower_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[1], twotheta_in_rad[0], -int_border_step), gamma_in_rad[0])
+       
         # Reverse the order of the coordinates to match the plotting convention
-        int_borders = (twoth_lower_border[::-1], twoth_upper_border[::-1], gamma_lower_border[::-1], gamma_upper_border[::-1])
+        int_borders = np.hstack([
+            twoth_lower_border[::-1],
+            gamma_upper_border[::-1],
+            twoth_upper_border[::-1],
+            gamma_lower_border[::-1],
+        ])
         
-        return intensity_slice, int_borders
+        return (int_index, intensity_slice), int_borders
 
 if __name__ == '__main__':
     # usage example
