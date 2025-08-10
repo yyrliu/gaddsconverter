@@ -130,7 +130,33 @@ class AreaDetectorImage(object):
             self.limits = (np.min(twoth), np.max(twoth), np.min(gamma), np.max(gamma))
         return self.limits
 
-    def convert(self, n_twoth=None, n_gamma=None):
+    def convert(self, n_twoth=None, n_gamma=None, method='kd_tree'):
+        """
+        Convert detector image to regular angular grid.
+        
+        Parameters
+        ----------
+        n_twoth : int, optional
+            Number of points in the 2θ direction. Defaults to detector width.
+        n_gamma : int, optional  
+            Number of points in the γ direction. Defaults to detector height.
+        method : str, optional
+            Interpolation method: 'kd_tree' or 'interpolation'. Defaults to 'kd_tree'.
+            
+        Raises
+        ------
+        ValueError
+            If image data has not been loaded.
+        """
+        if method == 'kd_tree':
+            self._convert_kd_tree(n_twoth, n_gamma)
+        elif method == 'interpolation':
+            self._convert_interpolation(n_twoth, n_gamma)
+        else:
+            raise ValueError(f"Unknown method '{method}'. Use 'kd_tree' or 'regular_grid'.")
+
+
+    def _convert_interpolation(self, n_twoth=None, n_gamma=None):
         if self.image.data is None:
             raise ValueError('Cannot convert because image has not been loaded.')
         if n_twoth is None:
@@ -163,42 +189,87 @@ class AreaDetectorImage(object):
             new = new.astype(np.float32) * self.scale + self.offset
         self.data_converted = new
 
-    def convert_kd_tree(self, n_twoth=None, n_gamma=None):
+    def _convert_kd_tree(self, n_twoth=None, n_gamma=None):
+        """
+        Convert detector image to regular angular grid using K-D tree nearest-neighbor interpolation.
+        
+        Transforms X-ray diffraction data from detector pixel coordinates to a uniform grid in (2θ, γ)
+        angular space. Uses K-D tree for fast nearest-neighbor lookup, preserving original intensity
+        values without smoothing interpolation.
+        
+        Parameters
+        ----------
+        n_twoth : int, optional
+            Number of points in the 2θ direction. Defaults to detector width.
+        n_gamma : int, optional  
+            Number of points in the γ direction. Defaults to detector height.
+            
+        Notes
+        -----
+        - Preserves photon counting statistics (no interpolation smoothing)
+        - Some output pixels may remain zero if no detector pixels map nearby
+        - Result stored in self.data_converted with axes self.indexes
+        
+        Raises
+        ------
+        ValueError
+            If image data has not been loaded.
+        """
+        # Validate input data
         if self.image.data is None:
             raise ValueError('Cannot convert because image has not been loaded.')
+        
+        if n_twoth is not None or n_gamma is not None:
+            print("Warning: Providing n_twoth or n_gamma will break the preservation of photon counting statistics. ")
+
+        # Set default grid dimensions to match detector
         if n_twoth is None:
-            n_twoth = self.image.shape[-1]
+            n_twoth = self.image.shape[-1]  # detector width
         if n_gamma is None:
-            n_gamma = self.image.shape[-2]
+            n_gamma = self.image.shape[-2]  # detector height
 
-        # determine range of twoth and gamma
+        # Calculate angular ranges from detector geometry
         self.relim()
-        seq_twoth = np.linspace(self.limits[0], self.limits[1], n_twoth)
+        twoth_min, twoth_max, gamma_min, gamma_max = self.limits
+        
+        # Create uniform angular sequences
+        twoth_seq = np.linspace(twoth_min, twoth_max, n_twoth)
         if self.alpha >= 0:
-            seq_gamma = np.linspace(self.limits[2], self.limits[3], n_gamma)
+            gamma_seq = np.linspace(gamma_min, gamma_max, n_gamma)
         else:
-            seq_gamma = np.linspace(self.limits[3], self.limits[2], n_gamma)
-        self.indexes = tuple(np.rad2deg((seq_gamma, seq_twoth)))
+            gamma_seq = np.linspace(gamma_max, gamma_min, n_gamma)
+        
+        self.indexes = (np.rad2deg(gamma_seq), np.rad2deg(twoth_seq))
 
-        # create regular (twoth, gamma) grid and then convert it to (row, col)
-        angles_grid = np.meshgrid(seq_twoth, seq_gamma, indexing='xy')
-        angles_grid_in_row, angles_grid_in_col = self.angles_to_rowcol(*angles_grid)
-
-        row_col_grid = np.meshgrid(np.arange(self.indexes[0].shape[0]), np.arange(self.indexes[1].shape[0]), indexing='ij')
-        # new_twoth, new_gamma = self.rowcol_to_angles(*np.meshgrid(np.arange(self.image.shape[-2]), np.arange(self.image.shape[-2]), indexing='ij'))
-
-        # perform KD-tree interpolation
-        angles_grid_points_in_rowcol = np.c_[angles_grid_in_row.ravel(), angles_grid_in_col.ravel()]
-        tree = KDTree(angles_grid_points_in_rowcol)
-        coords = np.c_[row_col_grid[0].ravel(), row_col_grid[1].ravel()]
-
-        new = np.zeros((n_gamma, n_twoth), dtype=self.image.data.dtype).flatten()
-        new[tree.query(coords)[1]] = self.image.data.flatten()
-        new = new.reshape((n_gamma, n_twoth))
-
+        # Create regular angular grid and convert to detector coordinates
+        twoth_grid, gamma_grid = np.meshgrid(twoth_seq, gamma_seq, indexing='xy')
+        det_rows, det_cols = self.angles_to_rowcol(twoth_grid, gamma_grid)
+        
+        # Create output grid indices
+        out_rows, out_cols = np.mgrid[:n_gamma, :n_twoth]
+        
+        # Prepare data for K-D tree: target positions (where we want values)
+        target_coords = np.column_stack([det_rows.ravel(), det_cols.ravel()])
+        
+        # Build K-D tree for fast nearest-neighbor search
+        tree = KDTree(target_coords)
+        
+        # Source positions: regular output grid indices
+        source_coords = np.column_stack([out_rows.ravel(), out_cols.ravel()])
+        
+        # Find nearest neighbors and map detector values to output grid
+        _, nearest_indices = tree.query(source_coords)
+        
+        # Initialize output array and assign values using nearest-neighbor mapping
+        output_flat = np.zeros(n_gamma * n_twoth, dtype=self.image.data.dtype)
+        output_flat[nearest_indices] = self.image.data.ravel()
+        output = output_flat.reshape(n_gamma, n_twoth)
+        
+        # Apply scaling if needed
         if self.scale != 1 or self.offset != 0:
-            new = new.astype(np.float32) * self.scale + self.offset
-        self.data_converted = new
+            output = output.astype(np.float32) * self.scale + self.offset
+        
+        self.data_converted = output
 
     def gridline(self, angle_deg, axis='twoth', delta_deg=0.1):
         """Extracts data for grid lines of constant 2θ and constant γ that can be plotted on a GADDS image.
