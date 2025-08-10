@@ -8,6 +8,7 @@ import numpy as np
 from fabio.brukerimage import BrukerImage
 from numpy import sin, cos, tan, arccos
 from scipy.interpolate import RegularGridInterpolator
+from scipy.spatial import KDTree
 
 logger = getLogger(__name__)
 
@@ -162,6 +163,43 @@ class AreaDetectorImage(object):
             new = new.astype(np.float32) * self.scale + self.offset
         self.data_converted = new
 
+    def convert_kd_tree(self, n_twoth=None, n_gamma=None):
+        if self.image.data is None:
+            raise ValueError('Cannot convert because image has not been loaded.')
+        if n_twoth is None:
+            n_twoth = self.image.shape[-1]
+        if n_gamma is None:
+            n_gamma = self.image.shape[-2]
+
+        # determine range of twoth and gamma
+        self.relim()
+        seq_twoth = np.linspace(self.limits[0], self.limits[1], n_twoth)
+        if self.alpha >= 0:
+            seq_gamma = np.linspace(self.limits[2], self.limits[3], n_gamma)
+        else:
+            seq_gamma = np.linspace(self.limits[3], self.limits[2], n_gamma)
+        self.indexes = tuple(np.rad2deg((seq_gamma, seq_twoth)))
+
+        # create regular (twoth, gamma) grid and then convert it to (row, col)
+        angles_grid = np.meshgrid(seq_twoth, seq_gamma, indexing='xy')
+        angles_grid_in_row, angles_grid_in_col = self.angles_to_rowcol(*angles_grid)
+
+        row_col_grid = np.meshgrid(np.arange(self.indexes[0].shape[0]), np.arange(self.indexes[1].shape[0]), indexing='ij')
+        # new_twoth, new_gamma = self.rowcol_to_angles(*np.meshgrid(np.arange(self.image.shape[-2]), np.arange(self.image.shape[-2]), indexing='ij'))
+
+        # perform KD-tree interpolation
+        angles_grid_points_in_rowcol = np.c_[angles_grid_in_row.ravel(), angles_grid_in_col.ravel()]
+        tree = KDTree(angles_grid_points_in_rowcol)
+        coords = np.c_[row_col_grid[0].ravel(), row_col_grid[1].ravel()]
+
+        new = np.zeros((n_gamma, n_twoth), dtype=self.image.data.dtype).flatten()
+        new[tree.query(coords)[1]] = self.image.data.flatten()
+        new = new.reshape((n_gamma, n_twoth))
+
+        if self.scale != 1 or self.offset != 0:
+            new = new.astype(np.float32) * self.scale + self.offset
+        self.data_converted = new
+
     def gridline(self, angle_deg, axis='twoth', delta_deg=0.1):
         """Extracts data for grid lines of constant 2θ and constant γ that can be plotted on a GADDS image.
 
@@ -194,7 +232,8 @@ class AreaDetectorImage(object):
 
             # In order: 2theta, omega, phi, chi
             diffractometer_angles = [float(angles) for angles in image.header['ANGLES'].split()]
-            self.alpha, _, _, self.chi = np.deg2rad(diffractometer_angles)
+            self.alpha, _, _, chi = np.deg2rad(diffractometer_angles)
+            self.chi = -chi  # GADDS uses the opposite sign for chi
 
             self.goniometer_pos = tuple(float(x) for x in image.header['AXES2'].split())
 
@@ -283,7 +322,11 @@ class AreaDetectorImage(object):
             not self.limits[0] <= twotheta_in_rad[1] <= self.limits[1] or \
             not self.limits[2] <= gamma_in_rad[0] <= self.limits[3] or \
             not self.limits[2] <= gamma_in_rad[1] <= self.limits[3]:
-            raise ValueError('Specified range is outside the limits of the image.')
+            err = 'Specified range is outside the limits of the image.\n'
+            err += f'twotheta_range: {twotheta_range}, gamma_range: {gamma_range}\n'
+            err += f'image limits (deg): 2theta: {np.rad2deg(self.limits[0:2]).tolist()},' 
+            err += f'gamma: {np.rad2deg(self.limits[2:4]).tolist()}'
+            raise ValueError(err)
 
         gamma_mask = (self.indexes[0] >= gamma_range[0]) & (self.indexes[0] <= gamma_range[1])
         twoth_mask = (self.indexes[1] >= twotheta_range[0]) & (self.indexes[1] <= twotheta_range[1])
@@ -315,6 +358,15 @@ class AreaDetectorImage(object):
         ])
         
         return (int_index, intensity_slice), int_borders
+    
+    def integrate_2theta(self, twotheta_range=None, gamma_scale=0.2):
+        """Shortcut for integrate with mode='2theta'."""
+        if twotheta_range is None:
+            twotheta_range = (15, 12.5)
+        alpha_deg = np.rad2deg(self.alpha)
+        twotheta_lim = (alpha_deg - twotheta_range[0], alpha_deg + twotheta_range[1])
+        gamma_range = np.rad2deg([(self.limits[2] - self.chi) * gamma_scale + self.chi , (self.limits[3] - self.chi) * gamma_scale + self.chi])
+        return self.integrate(twotheta_range=twotheta_lim, gamma_range=gamma_range, mode='2theta')
 
 if __name__ == '__main__':
     # usage example
