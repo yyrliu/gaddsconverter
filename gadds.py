@@ -130,7 +130,7 @@ class AreaDetectorImage(object):
             self.limits = (np.min(twoth), np.max(twoth), np.min(gamma), np.max(gamma))
         return self.limits
 
-    def convert(self, n_twoth=None, n_gamma=None, method='kd_tree'):
+    def convert(self, n_twoth=None, n_gamma=None, method='kd_tree', overlap_method=None):
         """
         Convert detector image to regular angular grid.
         
@@ -149,8 +149,10 @@ class AreaDetectorImage(object):
             If image data has not been loaded.
         """
         if method == 'kd_tree':
-            self._convert_kd_tree(n_twoth, n_gamma)
+            self._convert_kd_tree(n_twoth, n_gamma, overlap_method=overlap_method)
         elif method == 'interpolation':
+            if overlap_method is not None:
+                print("Warning: The 'overlap_method' parameter is not applicable for 'interpolation' method, ignoring it.")
             self._convert_interpolation(n_twoth, n_gamma)
         else:
             raise ValueError(f"Unknown method '{method}'. Use 'kd_tree' or 'regular_grid'.")
@@ -189,13 +191,13 @@ class AreaDetectorImage(object):
             new = new.astype(np.float32) * self.scale + self.offset
         self.data_converted = new
 
-    def _convert_kd_tree(self, n_twoth=None, n_gamma=None):
+    def _convert_kd_tree(self, n_twoth=None, n_gamma=None, overlap_method=None):
         """
         Convert detector image to regular angular grid using K-D tree nearest-neighbor interpolation.
         
         Transforms X-ray diffraction data from detector pixel coordinates to a uniform grid in (2θ, γ)
-        angular space. Uses K-D tree for fast nearest-neighbor lookup, preserving original intensity
-        values without smoothing interpolation.
+        angular space. Uses K-D tree for fast nearest-neighbor lookup with configurable handling of
+        overlapping detector pixels.
         
         Parameters
         ----------
@@ -203,24 +205,36 @@ class AreaDetectorImage(object):
             Number of points in the 2θ direction. Defaults to detector width.
         n_gamma : int, optional  
             Number of points in the γ direction. Defaults to detector height.
+        overlap_method : str, optional
+            Method for handling multiple detector pixels mapping to same grid point:
+            - 'normalize': Average intensities (preserves intensity scale, recommended)
+            - 'sum': Sum intensities (preserves photon counts but may bias high-2θ)
+            - 'last': Last pixel overwrites (original behavior, may lose data)
             
         Notes
         -----
-        - Preserves photon counting statistics (no interpolation smoothing)
-        - Some output pixels may remain zero if no detector pixels map nearby
+        - 'normalize' method maintains physical intensity scales across 2θ range
+        - 'sum' method preserves total photon counts but creates density artifacts
+        - 'last' method may lose data where multiple pixels map to same grid point
         - Result stored in self.data_converted with axes self.indexes
         
         Raises
         ------
         ValueError
-            If image data has not been loaded.
+            If image data has not been loaded or invalid overlap_method specified.
         """
         # Validate input data
         if self.image.data is None:
             raise ValueError('Cannot convert because image has not been loaded.')
         
+        valid_methods = ['normalize', 'sum', 'last']
+        if overlap_method is None:
+            overlap_method = 'normalize'
+        if overlap_method not in valid_methods:
+            raise ValueError(f"Invalid overlap_method '{overlap_method}'. Use one of {valid_methods}.")
+        
         if n_twoth is not None or n_gamma is not None:
-            print("Warning: Providing n_twoth or n_gamma will break the preservation of photon counting statistics. ")
+            print("Warning: Providing n_twoth or n_gamma will break the preservation of photon counting statistics.")
 
         # Set default grid dimensions to match detector
         if n_twoth is None:
@@ -260,14 +274,56 @@ class AreaDetectorImage(object):
         # Find nearest neighbors and map detector values to output grid
         _, nearest_indices = tree.query(source_coords)
         
-        # Initialize output array and assign values using nearest-neighbor mapping
-        output_flat = np.zeros(n_gamma * n_twoth, dtype=self.image.data.dtype)
-        output_flat[nearest_indices] = self.image.data.ravel()
+        # Handle overlapping pixels based on selected method
+        if overlap_method == 'last':
+            # Original behavior: last assignment wins (may lose data)
+            output_flat = np.zeros(n_gamma * n_twoth, dtype=self.image.data.dtype)
+            output_flat[nearest_indices] = self.image.data.ravel()
+            
+        elif overlap_method == 'sum':
+            # Sum all overlapping values (preserves counts but may create density bias)
+            output_flat = np.zeros(n_gamma * n_twoth, dtype=np.float64)
+            np.add.at(output_flat, nearest_indices, self.image.data.ravel())
+            
+        elif overlap_method == 'normalize':
+            # Average overlapping values (preserves intensity scale, recommended)
+            output_flat = np.zeros(n_gamma * n_twoth, dtype=np.float64)
+            count_flat = np.zeros(n_gamma * n_twoth, dtype=np.int32)
+            
+            # Accumulate values and counts
+            np.add.at(output_flat, nearest_indices, self.image.data.ravel())
+            np.add.at(count_flat, nearest_indices, 1)
+            
+            # Normalize by pixel count where data exists
+            valid_mask = count_flat > 0
+            output_flat[valid_mask] /= count_flat[valid_mask]
+            
+            # Store pixel density information for analysis/debugging
+            self.pixel_density = count_flat.reshape(n_gamma, n_twoth)
+            
+            # Report overlap statistics
+            overlap_pixels = np.sum(count_flat > 1)
+            if overlap_pixels > 0:
+                max_overlap = np.max(count_flat)
+                print(f"Info: {overlap_pixels} grid points have overlapping detector pixels "
+                    f"(max {max_overlap} pixels per grid point)")
+        
+        # Reshape to 2D grid
         output = output_flat.reshape(n_gamma, n_twoth)
         
         # Apply scaling if needed
         if self.scale != 1 or self.offset != 0:
             output = output.astype(np.float32) * self.scale + self.offset
+        elif overlap_method == 'last':
+            # Keep original dtype for 'last' method if no scaling
+            pass  # output already has correct dtype
+        else:
+            # Convert back to appropriate dtype for sum/normalize methods
+            if np.issubdtype(self.image.data.dtype, np.integer):
+                # For integer data, use float32 to avoid overflow in sum/normalize
+                output = output.astype(np.float32)
+            else:
+                output = output.astype(self.image.data.dtype)
         
         self.data_converted = output
 
