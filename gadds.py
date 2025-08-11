@@ -395,7 +395,7 @@ class AreaDetectorImage(object):
         if self.image.data is not None:
             self.relim()
 
-    def integrate(self, twotheta_range, gamma_range, mode='2theta'):
+    def integrate(self, twotheta_range, gamma_range, mode='2theta', bin_size=None):
         """
         Integrate the image data within specified 2θ and γ angular ranges.
 
@@ -413,6 +413,10 @@ class AreaDetectorImage(object):
             - '2theta': Integrate over γ, returning intensity as a function of 2θ.
             - 'gamma': Integrate over 2θ, returning intensity as a function of γ.
             Default is '2theta'.
+        bin_size : int, optional
+            If specified and greater than 1, the resulting intensity data will be binned by this factor.
+            Binning is done by summing intensities in adjacent bins of size.
+            Default is 1 (no binning) for '2theta mode' and 2 for 'gamma'.
 
         Returns
         -------
@@ -452,13 +456,31 @@ class AreaDetectorImage(object):
         if mode == '2theta':
             sum_axis = 0
             int_index = self.indexes[1][twoth_mask]
+            if bin_size is None:
+                bin_size = 1
         elif mode == 'gamma':
             sum_axis = 1
             int_index = self.indexes[0][gamma_mask]
+            if bin_size is None:
+                bin_size = 2
         else:
-            raise ValueError('Unknown mode: %s' % mode)
+            raise ValueError(f'Unknown mode: {mode}')
         
         intensity_slice = np.sum(self.data_converted[gamma_mask, :][:, twoth_mask], axis=sum_axis)
+        
+        if bin_size > 1:            
+            # Bin the intensity data by summing values within angular ranges
+            # np.histogram with weights sums the intensity values that fall
+            # within each bin, effectively performing the binning operation
+            intensity_binned, bin_edges = np.histogram(
+                int_index,                    # Angular values (x-axis)
+                bins=len(int_index) // bin_size,
+                weights=intensity_slice       # Weight each bin contribution by its intensity value
+            )
+            
+            # Bin centers as final angular values
+            int_index = (bin_edges[:-1] + bin_edges[1:]) / 2
+            intensity_slice = intensity_binned
 
         int_border_step = np.deg2rad(0.1)
         # Create borders for the integration region, clockwise starting from the upper right corner with respect to the detector image.
