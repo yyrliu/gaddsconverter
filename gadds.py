@@ -53,7 +53,7 @@ class AreaDetectorImage(object):
         self.scale = 1  # linear scale factor
         self.offset = 0  # linear offset
         self.limits = (np.nan, np.nan, np.nan, np.nan)  # min2θ, max2θ, minγ, maxγ
-        self.data_converted = np.ndarray((0, 0), dtype=int)
+        self.data_converted = np.ndarray((0, 0), dtype=float) # converted data
         self.indexes = (np.arange(0), np.arange(0))
         self.goniometer_pos = (np.nan, np.nan, np.nan, np.nan)  # x, y, z, aux (unit: mm)
         self.load_headers()
@@ -274,20 +274,21 @@ class AreaDetectorImage(object):
         # Find nearest neighbors and map detector values to output grid
         _, nearest_indices = tree.query(source_coords)
         
+        output_flat = np.full(n_gamma * n_twoth, np.nan)
+        output_flat[nearest_indices] = 0
+        output_flat = np.ma.masked_invalid(output_flat)  # Mask invalid entries
+
         # Handle overlapping pixels based on selected method
         if overlap_method == 'last':
             # Original behavior: last assignment wins (may lose data)
-            output_flat = np.zeros(n_gamma * n_twoth, dtype=self.image.data.dtype)
             output_flat[nearest_indices] = self.image.data.ravel()
             
         elif overlap_method == 'sum':
             # Sum all overlapping values (preserves counts but may create density bias)
-            output_flat = np.zeros(n_gamma * n_twoth, dtype=np.float64)
             np.add.at(output_flat, nearest_indices, self.image.data.ravel())
             
         elif overlap_method == 'normalize':
             # Average overlapping values (preserves intensity scale, recommended)
-            output_flat = np.zeros(n_gamma * n_twoth, dtype=np.float64)
             count_flat = np.zeros(n_gamma * n_twoth, dtype=np.int32)
             
             # Accumulate values and counts
@@ -314,16 +315,6 @@ class AreaDetectorImage(object):
         # Apply scaling if needed
         if self.scale != 1 or self.offset != 0:
             output = output.astype(np.float32) * self.scale + self.offset
-        elif overlap_method == 'last':
-            # Keep original dtype for 'last' method if no scaling
-            pass  # output already has correct dtype
-        else:
-            # Convert back to appropriate dtype for sum/normalize methods
-            if np.issubdtype(self.image.data.dtype, np.integer):
-                # For integer data, use float32 to avoid overflow in sum/normalize
-                output = output.astype(np.float32)
-            else:
-                output = output.astype(self.image.data.dtype)
         
         self.data_converted = output
 
