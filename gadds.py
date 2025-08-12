@@ -54,7 +54,7 @@ class AreaDetectorImage(object):
         self.offset = 0  # linear offset
         self.limits = (np.nan, np.nan, np.nan, np.nan)  # min2θ, max2θ, minγ, maxγ
         self.data_converted = np.ndarray((0, 0), dtype=float) # converted data
-        self.indexes = (np.arange(0), np.arange(0))
+        self.indexes = (np.arange(0), np.arange(0)) # (γ, 2θ) in degrees
         self.goniometer_pos = (np.nan, np.nan, np.nan, np.nan)  # x, y, z, aux (unit: mm)
         self.load_headers()
 
@@ -260,7 +260,7 @@ class AreaDetectorImage(object):
         det_rows, det_cols = self.angles_to_rowcol(twoth_grid, gamma_grid)
         
         # Create output grid indices
-        out_rows, out_cols = np.mgrid[:n_gamma, :n_twoth]
+        out_rows, out_cols = np.mgrid[:self.image.shape[-2], :self.image.shape[-1]]
         
         # Prepare data for K-D tree: target positions (where we want values)
         target_coords = np.column_stack([det_rows.ravel(), det_cols.ravel()])
