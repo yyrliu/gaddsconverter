@@ -467,6 +467,11 @@ class AreaDetectorImage(object):
             raise ValueError(f'Unknown mode: {mode}')
         
         intensity_slice = np.sum(self.data_converted[gamma_mask, :][:, twoth_mask], axis=sum_axis)
+
+        # Remove invalid integration indices and values
+        if isinstance(int_index, np.ma.MaskedArray):
+            int_index = int_index[~np.ma.getmaskarray(intensity_slice)]
+            intensity_slice = intensity_slice.compressed()
         
         if bin_size > 1:            
             # Bin the intensity data by summing values within angular ranges
@@ -499,15 +504,29 @@ class AreaDetectorImage(object):
         
         return (int_index, intensity_slice), int_borders
     
-    def integrate_2theta(self, twotheta_range=None, gamma_scale=0.2):
+    def integrate_2theta(self, twotheta_range=None, gamma_scale=0.2, int_dict={}):
         """Shortcut for integrate with mode='2theta'."""
         if twotheta_range is None:
             twotheta_range = (15, 12.5)
         alpha_deg = np.rad2deg(self.alpha)
         twotheta_lim = (alpha_deg - twotheta_range[0], alpha_deg + twotheta_range[1])
         gamma_range = np.rad2deg([(self.limits[2] - self.chi) * gamma_scale + self.chi , (self.limits[3] - self.chi) * gamma_scale + self.chi])
-        return self.integrate(twotheta_range=twotheta_lim, gamma_range=gamma_range, mode='2theta')
+        return (self.integrate(twotheta_range=twotheta_lim, gamma_range=gamma_range, mode='2theta', **int_dict), twotheta_lim, gamma_range)
 
+    def integrate_gamma(self, twotheta_range, gamma_range=None, int_dict={}):
+        """Shortcut for integrate with mode='gamma'."""
+        if gamma_range is None:
+            # center_twoth_index = np.searchsorted(self.indexes[1], np.mean(twotheta_range))
+            # print(f'Center twotheta: {self.indexes[1][center_twoth_index]}')
+            # center_gamma_slice = self.data_converted.copy()[:, center_twoth_index]
+            # center_gamma_slice[center_gamma_slice <= 0] = np.ma.masked
+            # edges = np.ma.flatnotmasked_edges(center_gamma_slice)
+            # print(f'Edges for gamma integration: {edges}')
+            # gamma_range = self.indexes[0][edges]
+            # print(f'Gamma range: {gamma_range}')
+            gamma_range = np.rad2deg(self.limits[2:4])
+        return (self.integrate(twotheta_range=twotheta_range, gamma_range=gamma_range, mode='gamma', **int_dict), twotheta_range, gamma_range)
+    
 if __name__ == '__main__':
     # usage example
     import matplotlib.pyplot as plt
