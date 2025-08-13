@@ -395,6 +395,28 @@ class AreaDetectorImage(object):
         if self.image.data is not None:
             self.relim()
 
+    def plot_integration_borders(self, twotheta_range, gamma_range):
+
+        gamma_in_rad = np.deg2rad(gamma_range)
+        twotheta_in_rad = np.deg2rad(twotheta_range)
+
+        int_border_step = np.deg2rad(0.1)
+        # Create borders for the integration region, clockwise starting from the upper right corner with respect to the detector image.
+        twoth_lower_border = self.angles_to_rowcol(twotheta_in_rad[0], np.arange(gamma_in_rad[0], gamma_in_rad[1], int_border_step))
+        gamma_upper_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[0], twotheta_in_rad[1], int_border_step), gamma_in_rad[1])
+        twoth_upper_border = self.angles_to_rowcol(twotheta_in_rad[1], np.arange(gamma_in_rad[1], gamma_in_rad[0], -int_border_step))
+        gamma_lower_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[1], twotheta_in_rad[0], -int_border_step), gamma_in_rad[0])
+       
+        # Reverse the order of the coordinates to match the plotting convention
+        int_borders = np.hstack([
+            twoth_lower_border[::-1],
+            gamma_upper_border[::-1],
+            twoth_upper_border[::-1],
+            gamma_lower_border[::-1],
+        ])
+
+        return int_borders
+
     def integrate(self, twotheta_range, gamma_range, mode='2theta', bin_size=None):
         """
         Integrate the image data within specified 2θ and γ angular ranges.
@@ -486,23 +508,8 @@ class AreaDetectorImage(object):
             # Bin centers as final angular values
             int_index = (bin_edges[:-1] + bin_edges[1:]) / 2
             intensity_slice = intensity_binned
-
-        int_border_step = np.deg2rad(0.1)
-        # Create borders for the integration region, clockwise starting from the upper right corner with respect to the detector image.
-        twoth_lower_border = self.angles_to_rowcol(twotheta_in_rad[0], np.arange(gamma_in_rad[0], gamma_in_rad[1], int_border_step))
-        gamma_upper_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[0], twotheta_in_rad[1], int_border_step), gamma_in_rad[1])
-        twoth_upper_border = self.angles_to_rowcol(twotheta_in_rad[1], np.arange(gamma_in_rad[1], gamma_in_rad[0], -int_border_step))
-        gamma_lower_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[1], twotheta_in_rad[0], -int_border_step), gamma_in_rad[0])
-       
-        # Reverse the order of the coordinates to match the plotting convention
-        int_borders = np.hstack([
-            twoth_lower_border[::-1],
-            gamma_upper_border[::-1],
-            twoth_upper_border[::-1],
-            gamma_lower_border[::-1],
-        ])
         
-        return (int_index, intensity_slice), int_borders
+        return (int_index, intensity_slice)
     
     def integrate_2theta(self, twotheta_range=None, gamma_scale=0.2, int_dict={}):
         """Shortcut for integrate with mode='2theta'."""
@@ -511,21 +518,26 @@ class AreaDetectorImage(object):
         alpha_deg = np.rad2deg(self.alpha)
         twotheta_lim = (alpha_deg - twotheta_range[0], alpha_deg + twotheta_range[1])
         gamma_range = np.rad2deg([(self.limits[2] - self.chi) * gamma_scale + self.chi , (self.limits[3] - self.chi) * gamma_scale + self.chi])
-        return (self.integrate(twotheta_range=twotheta_lim, gamma_range=gamma_range, mode='2theta', **int_dict), twotheta_lim, gamma_range)
+
+        int_borders = self.plot_integration_borders(twotheta_lim, gamma_range)
+        int_res = self.integrate(twotheta_range=twotheta_lim, gamma_range=gamma_range, mode='2theta', **int_dict)
+        return (int_res, (twotheta_lim, gamma_range), int_borders)
 
     def integrate_gamma(self, twotheta_range, gamma_range=None, int_dict={}):
         """Shortcut for integrate with mode='gamma'."""
         if gamma_range is None:
-            # center_twoth_index = np.searchsorted(self.indexes[1], np.mean(twotheta_range))
-            # print(f'Center twotheta: {self.indexes[1][center_twoth_index]}')
-            # center_gamma_slice = self.data_converted.copy()[:, center_twoth_index]
-            # center_gamma_slice[center_gamma_slice <= 0] = np.ma.masked
-            # edges = np.ma.flatnotmasked_edges(center_gamma_slice)
-            # print(f'Edges for gamma integration: {edges}')
-            # gamma_range = self.indexes[0][edges]
-            # print(f'Gamma range: {gamma_range}')
             gamma_range = np.rad2deg(self.limits[2:4])
-        return (self.integrate(twotheta_range=twotheta_range, gamma_range=gamma_range, mode='gamma', **int_dict), twotheta_range, gamma_range)
+        
+        (int_index, intensity_slice) = self.integrate(twotheta_range=twotheta_range, gamma_range=gamma_range, mode='gamma', **int_dict)
+
+        valid_mask = intensity_slice > 0
+        int_index = int_index[valid_mask]
+        intensity_slice = intensity_slice[valid_mask]
+        gamma_range = (int_index[0], int_index[-1])
+
+        int_borders = self.plot_integration_borders(twotheta_range, gamma_range)
+
+        return ((int_index, intensity_slice), (twotheta_range, gamma_range), int_borders)
     
 if __name__ == '__main__':
     # usage example
