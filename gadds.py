@@ -14,22 +14,22 @@ logger = getLogger(__name__)
 
 DETTYPE = {
     # DETECTORNAME: (PIXPERCM, CMTOGRID)
-    'MULTIWIRE': (47.5, 2.0),
-    'CCD-PXL-2K': (56.02, 0.8),
-    'CCD-PXL-ARR': (32.0, 0.4),
-    'CCD-PXL-KAF1500': (51.2, 0.8),
-    'CCD-PXL-L6000N': (56.02, 0.8),
-    'CCD-PXL-L6000F': (56.02, 0.8),
-    'CCD-PXL-L6500': (32.00, 1.5),
-    'CCD-PXL-KAF2': (81.92, 0.8),
-    'CCD-PXL-KAF': (81.92, 0.8),
-    'CCD-PXL-MSPD': (81.92, 0.8),
-    'CCD-PXL': (81.92, 0.8),
-    'CCD-PXL-LDI': (83.333, 0.0),
+    "MULTIWIRE": (47.5, 2.0),
+    "CCD-PXL-2K": (56.02, 0.8),
+    "CCD-PXL-ARR": (32.0, 0.4),
+    "CCD-PXL-KAF1500": (51.2, 0.8),
+    "CCD-PXL-L6000N": (56.02, 0.8),
+    "CCD-PXL-L6000F": (56.02, 0.8),
+    "CCD-PXL-L6500": (32.00, 1.5),
+    "CCD-PXL-KAF2": (81.92, 0.8),
+    "CCD-PXL-KAF": (81.92, 0.8),
+    "CCD-PXL-MSPD": (81.92, 0.8),
+    "CCD-PXL": (81.92, 0.8),
+    "CCD-PXL-LDI": (83.333, 0.0),
 }
 
-if (b'FORMAT :100', 'bruker100') not in fabio.openimage.MAGIC_NUMBERS:
-    fabio.openimage.MAGIC_NUMBERS.append((b'FORMAT :100', 'bruker100'))
+if (b"FORMAT :100", "bruker100") not in fabio.openimage.MAGIC_NUMBERS:
+    fabio.openimage.MAGIC_NUMBERS.append((b"FORMAT :100", "bruker100"))
 
 
 class AreaDetectorImage(object):
@@ -45,25 +45,35 @@ class AreaDetectorImage(object):
             if np.issubdtype(image.data.dtype, np.integer) and np.min(image.data) >= 0:
                 image.data = image.data.astype(np.min_scalar_type(np.max(image.data)))
         self.image = image
-        self.alpha = np.nan  # 2-theta value at the center of the detector (unit: radian)
+        self.alpha = (
+            np.nan
+        )  # 2-theta value at the center of the detector (unit: radian)
         self.chi = np.nan  # Chi angle (unit: radian)
         self.distance = np.nan  # Distance from sample to detector plane (unit: cm)
         self.densityXY = (np.nan, np.nan)  # Number of pixels per unit length (cm)
-        self.centerXY = (np.nan, np.nan)  # x, y coordinates of the detector center (unit: pixels).
+        self.centerXY = (
+            np.nan,
+            np.nan,
+        )  # x, y coordinates of the detector center (unit: pixels).
         self.scale = 1  # linear scale factor
         self.offset = 0  # linear offset
         self.limits = (np.nan, np.nan, np.nan, np.nan)  # min2θ, max2θ, minγ, maxγ
-        self.data_converted = np.ndarray((0, 0), dtype=float) # converted data
-        self.indexes = (np.arange(0), np.arange(0)) # (γ, 2θ) in degrees
-        self.goniometer_pos = (np.nan, np.nan, np.nan, np.nan)  # x, y, z, aux (unit: mm)
+        self.data_converted = np.ndarray((0, 0), dtype=float)  # converted data
+        self.indexes = (np.arange(0), np.arange(0))  # (γ, 2θ) in degrees
+        self.goniometer_pos = (
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+        )  # x, y, z, aux (unit: mm)
         self.load_headers()
 
     def xy_to_angles(self, x, y):
         """convert from (x, y) coordinates to (twoth, gamma).
          (x, y) = (0, 0) corresponds to the detector center, and they should be given in cm.
-         
+
         Reference
-        B.B. He, Two-Dimensional X-Ray Diffraction (Wiley, 2011). 
+        B.B. He, Two-Dimensional X-Ray Diffraction (Wiley, 2011).
         2.3.4 Pixel Position in Diffraction Space -- Flat Detector
 
         :param x: x coordinate in cm.
@@ -73,10 +83,10 @@ class AreaDetectorImage(object):
         alpha = self.alpha
         D = self.distance
 
-        twoth = arccos((x*sin(alpha) + D*cos(alpha))/np.sqrt(D**2 + x**2 + y**2))
+        twoth = arccos((x * sin(alpha) + D * cos(alpha)) / np.sqrt(D**2 + x**2 + y**2))
 
-        det = x*cos(alpha) - D*sin(alpha)
-        sign = ((det >= 0) - 0.5)/0.5
+        det = x * cos(alpha) - D * sin(alpha)
+        sign = ((det >= 0) - 0.5) / 0.5
         gamma = sign * arccos(-y / np.sqrt(y**2 + det**2))
 
         return twoth, gamma
@@ -86,42 +96,49 @@ class AreaDetectorImage(object):
         dX, dY = self.densityXY
         cX, cY = self.centerXY
         if detector_shape is not None:
-            print("Warning: No image data available, using detector_shape for dimensions.")
+            print(
+                "Warning: No image data available, using detector_shape for dimensions."
+            )
             nY, nX = self.detector_shape
         else:
             nX, nY = self.image.dim1, self.image.dim2
-        x, y = (col - cX)/dX, -(row-(nY-cY))/dY
+        x, y = (col - cX) / dX, -(row - (nY - cY)) / dY
         return self.xy_to_angles(x, y)
 
     def angles_to_rowcol(self, twoth, gamma):
         """
         convert from (twoth, gamma) to (row, col).
         angles are given in rad.
-                
+
         Reference
-        B.B. He, Two-Dimensional X-Ray Diffraction (Wiley, 2011). 
+        B.B. He, Two-Dimensional X-Ray Diffraction (Wiley, 2011).
         2.3.4 Pixel Position in Diffraction Space -- Flat Detector
 
         """
         # Countermeasure for divergence of tan(2θ) at 2θ=90°
         if np.isscalar(twoth):
-            if np.isclose(twoth, np.pi/2, atol=1e-6, rtol=0):
+            if np.isclose(twoth, np.pi / 2, atol=1e-6, rtol=0):
                 twoth += 1e-6
         else:
             twoth = np.array(twoth, dtype=float)
-            twoth[np.isclose(twoth, np.pi/2, atol=1e-6, rtol=0)] += 1e-6
+            twoth[np.isclose(twoth, np.pi / 2, atol=1e-6, rtol=0)] += 1e-6
 
         alpha = self.alpha % (2 * np.pi)
         D = self.distance
 
-        x = D * (cos(alpha)*tan(twoth)*sin(gamma) + sin(alpha)) / \
-            (cos(alpha) - sin(alpha)*tan(twoth)*sin(gamma))
-        y = -(x*sin(alpha) + D*cos(alpha)) * tan(twoth) * cos(gamma)
+        x = (
+            D
+            * (cos(alpha) * tan(twoth) * sin(gamma) + sin(alpha))
+            / (cos(alpha) - sin(alpha) * tan(twoth) * sin(gamma))
+        )
+        y = -(x * sin(alpha) + D * cos(alpha)) * tan(twoth) * cos(gamma)
 
         # (x, y) corresponds to the lower left of the diagram, and (row, col) = (0, 0) corresponds to the upper left.
         # x corresponds to col, and y corresponds to row (very confusing).
-        return (self.image.shape[-2] - y * self.densityXY[1] - self.centerXY[1],
-                x * self.densityXY[0] + self.centerXY[0])
+        return (
+            self.image.shape[-2] - y * self.densityXY[1] - self.centerXY[1],
+            x * self.densityXY[0] + self.centerXY[0],
+        )
 
     def relim(self):
         rr, cc = np.indices((self.image.shape[-2], self.image.shape[-1]))
@@ -130,37 +147,42 @@ class AreaDetectorImage(object):
             self.limits = (np.min(twoth), np.max(twoth), np.min(gamma), np.max(gamma))
         return self.limits
 
-    def convert(self, n_twoth=None, n_gamma=None, method='kd_tree', overlap_method=None):
+    def convert(
+        self, n_twoth=None, n_gamma=None, method="kd_tree", overlap_method=None
+    ):
         """
         Convert detector image to regular angular grid.
-        
+
         Parameters
         ----------
         n_twoth : int, optional
             Number of points in the 2θ direction. Defaults to detector width.
-        n_gamma : int, optional  
+        n_gamma : int, optional
             Number of points in the γ direction. Defaults to detector height.
         method : str, optional
             Interpolation method: 'kd_tree' or 'interpolation'. Defaults to 'kd_tree'.
-            
+
         Raises
         ------
         ValueError
             If image data has not been loaded.
         """
-        if method == 'kd_tree':
+        if method == "kd_tree":
             self._convert_kd_tree(n_twoth, n_gamma, overlap_method=overlap_method)
-        elif method == 'interpolation':
+        elif method == "interpolation":
             if overlap_method is not None:
-                print("Warning: The 'overlap_method' parameter is not applicable for 'interpolation' method, ignoring it.")
+                print(
+                    "Warning: The 'overlap_method' parameter is not applicable for 'interpolation' method, ignoring it."
+                )
             self._convert_interpolation(n_twoth, n_gamma)
         else:
-            raise ValueError(f"Unknown method '{method}'. Use 'kd_tree' or 'regular_grid'.")
-
+            raise ValueError(
+                f"Unknown method '{method}'. Use 'kd_tree' or 'regular_grid'."
+            )
 
     def _convert_interpolation(self, n_twoth=None, n_gamma=None):
         if self.image.data is None:
-            raise ValueError('Cannot convert because image has not been loaded.')
+            raise ValueError("Cannot convert because image has not been loaded.")
         if n_twoth is None:
             n_twoth = self.image.shape[-1]
         if n_gamma is None:
@@ -176,17 +198,23 @@ class AreaDetectorImage(object):
         self.indexes = tuple(np.rad2deg((seq_gamma, seq_twoth)))
 
         # create regular (twoth, gamma) grid and then convert it to (row, col)
-        newrow, newcol = self.angles_to_rowcol(*np.meshgrid(seq_twoth, seq_gamma, indexing='xy'))
+        newrow, newcol = self.angles_to_rowcol(
+            *np.meshgrid(seq_twoth, seq_gamma, indexing="xy")
+        )
 
         # perform interpolation
         f = RegularGridInterpolator(
             (np.arange(self.image.shape[-2]), np.arange(self.image.shape[-1])),
             self.image.data,
-            method='nearest',
+            method="nearest",
             bounds_error=False,
-            fill_value=0
-         )
-        new = f(np.c_[newrow.ravel(), newcol.ravel()]).reshape((n_gamma, n_twoth)).astype(self.image.data.dtype)
+            fill_value=0,
+        )
+        new = (
+            f(np.c_[newrow.ravel(), newcol.ravel()])
+            .reshape((n_gamma, n_twoth))
+            .astype(self.image.data.dtype)
+        )
         if self.scale != 1 or self.offset != 0:
             new = new.astype(np.float32) * self.scale + self.offset
         self.data_converted = new
@@ -194,30 +222,30 @@ class AreaDetectorImage(object):
     def _convert_kd_tree(self, n_twoth=None, n_gamma=None, overlap_method=None):
         """
         Convert detector image to regular angular grid using K-D tree nearest-neighbor interpolation.
-        
+
         Transforms X-ray diffraction data from detector pixel coordinates to a uniform grid in (2θ, γ)
         angular space. Uses K-D tree for fast nearest-neighbor lookup with configurable handling of
         overlapping detector pixels.
-        
+
         Parameters
         ----------
         n_twoth : int, optional
             Number of points in the 2θ direction. Defaults to detector width.
-        n_gamma : int, optional  
+        n_gamma : int, optional
             Number of points in the γ direction. Defaults to detector height.
         overlap_method : str, optional
             Method for handling multiple detector pixels mapping to same grid point:
             - 'normalize': Average intensities (preserves intensity scale, recommended)
             - 'sum': Sum intensities (preserves photon counts but may bias high-2θ)
             - 'last': Last pixel overwrites (original behavior, may lose data)
-            
+
         Notes
         -----
         - 'normalize' method maintains physical intensity scales across 2θ range
         - 'sum' method preserves total photon counts but creates density artifacts
         - 'last' method may lose data where multiple pixels map to same grid point
         - Result stored in self.data_converted with axes self.indexes
-        
+
         Raises
         ------
         ValueError
@@ -225,16 +253,20 @@ class AreaDetectorImage(object):
         """
         # Validate input data
         if self.image.data is None:
-            raise ValueError('Cannot convert because image has not been loaded.')
-        
-        valid_methods = ['normalize', 'sum', 'last']
+            raise ValueError("Cannot convert because image has not been loaded.")
+
+        valid_methods = ["normalize", "sum", "last"]
         if overlap_method is None:
-            overlap_method = 'normalize'
+            overlap_method = "normalize"
         if overlap_method not in valid_methods:
-            raise ValueError(f"Invalid overlap_method '{overlap_method}'. Use one of {valid_methods}.")
-        
+            raise ValueError(
+                f"Invalid overlap_method '{overlap_method}'. Use one of {valid_methods}."
+            )
+
         if n_twoth is not None or n_gamma is not None:
-            print("Warning: Providing n_twoth or n_gamma will break the preservation of photon counting statistics.")
+            print(
+                "Warning: Providing n_twoth or n_gamma will break the preservation of photon counting statistics."
+            )
 
         # Set default grid dimensions to match detector
         if n_twoth is None:
@@ -245,96 +277,107 @@ class AreaDetectorImage(object):
         # Calculate angular ranges from detector geometry
         self.relim()
         twoth_min, twoth_max, gamma_min, gamma_max = self.limits
-        
+
         # Create uniform angular sequences
         twoth_seq = np.linspace(twoth_min, twoth_max, n_twoth)
         if self.alpha >= 0:
             gamma_seq = np.linspace(gamma_min, gamma_max, n_gamma)
         else:
             gamma_seq = np.linspace(gamma_max, gamma_min, n_gamma)
-        
+
         self.indexes = (np.rad2deg(gamma_seq), np.rad2deg(twoth_seq))
 
         # Create regular angular grid and convert to detector coordinates
-        twoth_grid, gamma_grid = np.meshgrid(twoth_seq, gamma_seq, indexing='xy')
+        twoth_grid, gamma_grid = np.meshgrid(twoth_seq, gamma_seq, indexing="xy")
         det_rows, det_cols = self.angles_to_rowcol(twoth_grid, gamma_grid)
-        
+
         # Create output grid indices
-        out_rows, out_cols = np.mgrid[:self.image.shape[-2], :self.image.shape[-1]]
-        
+        out_rows, out_cols = np.mgrid[: self.image.shape[-2], : self.image.shape[-1]]
+
         # Prepare data for K-D tree: target positions (where we want values)
         target_coords = np.column_stack([det_rows.ravel(), det_cols.ravel()])
-        
+
         # Build K-D tree for fast nearest-neighbor search
         tree = KDTree(target_coords)
-        
+
         # Source positions: regular output grid indices
         source_coords = np.column_stack([out_rows.ravel(), out_cols.ravel()])
-        
+
         # Find nearest neighbors and map detector values to output grid
         _, nearest_indices = tree.query(source_coords)
-        
+
         output_flat = np.full(n_gamma * n_twoth, np.nan)
         output_flat[nearest_indices] = 0
         output_flat = np.ma.masked_invalid(output_flat)  # Mask invalid entries
 
         # Handle overlapping pixels based on selected method
-        if overlap_method == 'last':
+        if overlap_method == "last":
             # Original behavior: last assignment wins (may lose data)
             output_flat[nearest_indices] = self.image.data.ravel()
-            
-        elif overlap_method == 'sum':
+
+        elif overlap_method == "sum":
             # Sum all overlapping values (preserves counts but may create density bias)
             np.add.at(output_flat, nearest_indices, self.image.data.ravel())
-            
-        elif overlap_method == 'normalize':
+
+        elif overlap_method == "normalize":
             # Average overlapping values (preserves intensity scale, recommended)
             count_flat = np.zeros(n_gamma * n_twoth, dtype=np.int32)
-            
+
             # Accumulate values and counts
             np.add.at(output_flat, nearest_indices, self.image.data.ravel())
             np.add.at(count_flat, nearest_indices, 1)
-            
+
             # Normalize by pixel count where data exists
             valid_mask = count_flat > 0
             output_flat[valid_mask] /= count_flat[valid_mask]
-            
+
             # Store pixel density information for analysis/debugging
             self.pixel_density = count_flat.reshape(n_gamma, n_twoth)
-            
+
             # Report overlap statistics
             overlap_pixels = np.sum(count_flat > 1)
             if overlap_pixels > 0:
                 max_overlap = np.max(count_flat)
-                print(f"Info: {overlap_pixels} grid points have overlapping detector pixels "
-                    f"(max {max_overlap} pixels per grid point)")
-        
+                print(
+                    f"Info: {overlap_pixels} grid points have overlapping detector pixels "
+                    f"(max {max_overlap} pixels per grid point)"
+                )
+
         # Reshape to 2D grid
         output = output_flat.reshape(n_gamma, n_twoth)
-        
+
         # Apply scaling if needed
         if self.scale != 1 or self.offset != 0:
             output = output.astype(np.float32) * self.scale + self.offset
-        
+
         self.data_converted = output
 
-    def gridline(self, angle_deg, axis='twoth', delta_deg=0.1):
+    def gridline(self, angle_deg, axis="twoth", delta_deg=0.1):
         """Extracts data for grid lines of constant 2θ and constant γ that can be plotted on a GADDS image.
 
         Note: If self.alpha or self.distance are changed manually, self.relim() must be executed before gridline."""
         angle = np.deg2rad(angle_deg)
         delta = np.deg2rad(delta_deg)
-        if axis == 'twoth':
+        if axis == "twoth":
             if not self.limits[0] <= angle <= self.limits[1]:
                 return [], []
-            rows, cols = self.angles_to_rowcol(angle, np.arange(self.limits[2], self.limits[3], delta))
-        elif axis == 'gamma':
+            rows, cols = self.angles_to_rowcol(
+                angle, np.arange(self.limits[2], self.limits[3], delta)
+            )
+        elif axis == "gamma":
             if not self.limits[2] <= angle <= self.limits[3]:
                 return [], []
-            rows, cols = self.angles_to_rowcol(np.arange(self.limits[0], self.limits[1], delta), angle)
+            rows, cols = self.angles_to_rowcol(
+                np.arange(self.limits[0], self.limits[1], delta), angle
+            )
         else:
-            raise ValueError('unknown axis: %s' % axis)
-        idx = (0 <= rows) & (rows < self.image.shape[-2]) & (0 <= cols) & (cols < self.image.shape[-1])
+            raise ValueError("unknown axis: %s" % axis)
+        idx = (
+            (0 <= rows)
+            & (rows < self.image.shape[-2])
+            & (0 <= cols)
+            & (cols < self.image.shape[-1])
+        )
         return cols[idx], rows[idx]
 
     def load_headers(self):
@@ -345,49 +388,56 @@ class AreaDetectorImage(object):
             Version 86 is described in detail in gaddsref.pdf included with GADDS, but there is no explanation for version 100.
             Here, the parameters are inferred from the values displayed when opened with DIFFRAC.EVA.
             """
-            if 'UNWARPED' not in image.header['TYPE']:
-                logger.warning('This frame has NOT been UNWARPED (corrected), and may contain some error.', stack_info=True)
+            if "UNWARPED" not in image.header["TYPE"]:
+                logger.warning(
+                    "This frame has NOT been UNWARPED (corrected), and may contain some error.",
+                    stack_info=True,
+                )
 
             # In order: 2theta, omega, phi, chi
-            diffractometer_angles = [float(angles) for angles in image.header['ANGLES'].split()]
+            diffractometer_angles = [
+                float(angles) for angles in image.header["ANGLES"].split()
+            ]
             self.alpha, _, _, chi = np.deg2rad(diffractometer_angles)
             self.chi = -chi  # GADDS uses the opposite sign for chi
 
-            self.goniometer_pos = tuple(float(x) for x in image.header['AXES2'].split())
+            self.goniometer_pos = tuple(float(x) for x in image.header["AXES2"].split())
 
             # CENTER
             # ver 86: two values, x and y, are recorded.
             # ver100: There are four values, but the latter two seem to be actually used.
-            self.centerXY = tuple(float(x) for x in image.header['CENTER'].split()[-2:])
+            self.centerXY = tuple(float(x) for x in image.header["CENTER"].split()[-2:])
 
             # linear scale and offset
-            if 'LINEAR' in image.header:
-                self.scale, self.offset = (float(x) for x in image.header['LINEAR'].split()[:2])
+            if "LINEAR" in image.header:
+                self.scale, self.offset = (
+                    float(x) for x in image.header["LINEAR"].split()[:2]
+                )
 
             # PIXPERCM: Number of pixels per cm (when the frame is 512x512)
-            m = re.search('PIXPERCM:([0-9\\.]+)', image.header['DETTYPE'])
+            m = re.search("PIXPERCM:([0-9\\.]+)", image.header["DETTYPE"])
             if m:
                 pixpercm = float(m.groups()[0])
             else:
                 try:
                     # For version 100, the DETTYPE format seems to be "name pixpercm cmtogrid (and so on)".
-                    pixpercm = float(image.header['DETTYPE'].split()[1])
+                    pixpercm = float(image.header["DETTYPE"].split()[1])
                 except (ValueError, IndexError):
-                    pixpercm = DETTYPE[image.header['DETTYPE']][0]
+                    pixpercm = DETTYPE[image.header["DETTYPE"]][0]
             nrows, ncols = image.data.shape
             self.densityXY = (pixpercm * ncols / 512, pixpercm * nrows / 512)
 
             # detector distance (distance between sample and detector plane)
             # The value of CMTOGRID is added to the first number in the DISTANC field.
-            distanc = float(image.header['DISTANC'].split()[0])
-            m = re.search('CMTOGRID:([0-9\\.]+)', image.header['DETTYPE'])
+            distanc = float(image.header["DISTANC"].split()[0])
+            m = re.search("CMTOGRID:([0-9\\.]+)", image.header["DETTYPE"])
             if m:
                 cmtogrid = float(m.groups()[0])
             else:
                 try:
-                    cmtogrid = float(image.header['DETTYPE'].split()[2])
+                    cmtogrid = float(image.header["DETTYPE"].split()[2])
                 except (ValueError, IndexError):
-                    cmtogrid = DETTYPE[image.header['DETTYPE']][1]
+                    cmtogrid = DETTYPE[image.header["DETTYPE"]][1]
             self.distance = distanc + cmtogrid
         else:
             pass
@@ -396,28 +446,41 @@ class AreaDetectorImage(object):
             self.relim()
 
     def plot_integration_borders(self, twotheta_range, gamma_range):
-
         gamma_in_rad = np.deg2rad(gamma_range)
         twotheta_in_rad = np.deg2rad(twotheta_range)
 
         int_border_step = np.deg2rad(0.1)
         # Create borders for the integration region, clockwise starting from the upper right corner with respect to the detector image.
-        twoth_lower_border = self.angles_to_rowcol(twotheta_in_rad[0], np.arange(gamma_in_rad[0], gamma_in_rad[1], int_border_step))
-        gamma_upper_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[0], twotheta_in_rad[1], int_border_step), gamma_in_rad[1])
-        twoth_upper_border = self.angles_to_rowcol(twotheta_in_rad[1], np.arange(gamma_in_rad[1], gamma_in_rad[0], -int_border_step))
-        gamma_lower_border = self.angles_to_rowcol(np.arange(twotheta_in_rad[1], twotheta_in_rad[0], -int_border_step), gamma_in_rad[0])
-       
+        twoth_lower_border = self.angles_to_rowcol(
+            twotheta_in_rad[0],
+            np.arange(gamma_in_rad[0], gamma_in_rad[1], int_border_step),
+        )
+        gamma_upper_border = self.angles_to_rowcol(
+            np.arange(twotheta_in_rad[0], twotheta_in_rad[1], int_border_step),
+            gamma_in_rad[1],
+        )
+        twoth_upper_border = self.angles_to_rowcol(
+            twotheta_in_rad[1],
+            np.arange(gamma_in_rad[1], gamma_in_rad[0], -int_border_step),
+        )
+        gamma_lower_border = self.angles_to_rowcol(
+            np.arange(twotheta_in_rad[1], twotheta_in_rad[0], -int_border_step),
+            gamma_in_rad[0],
+        )
+
         # Reverse the order of the coordinates to match the plotting convention
-        int_borders = np.hstack([
-            twoth_lower_border[::-1],
-            gamma_upper_border[::-1],
-            twoth_upper_border[::-1],
-            gamma_lower_border[::-1],
-        ])
+        int_borders = np.hstack(
+            [
+                twoth_lower_border[::-1],
+                gamma_upper_border[::-1],
+                twoth_upper_border[::-1],
+                gamma_lower_border[::-1],
+            ]
+        )
 
         return int_borders
 
-    def integrate(self, twotheta_range, gamma_range, mode='2theta', bin_size=None):
+    def integrate(self, twotheta_range, gamma_range, mode="2theta", bin_size=None):
         """
         Integrate the image data within specified 2θ and γ angular ranges.
 
@@ -442,10 +505,10 @@ class AreaDetectorImage(object):
 
         Returns
         -------
-        (int_index, intensity_slice): tuple(numpy.ndarray, numpy.ndarray) 
+        (int_index, intensity_slice): tuple(numpy.ndarray, numpy.ndarray)
             - int_index: 1D numpy array of angular values (in degrees) along the integrated axis.
             - intensity_slice: 1D numpy array of integrated intensity values.
-            
+
         int_borders: numpy.ndarray
             array of (x, y) coordinates for the integration borders, ordered clockwise. Starts from the upper right corner with respect to the detector image.
 
@@ -457,78 +520,105 @@ class AreaDetectorImage(object):
         """
 
         if self.data_converted.size == 0:
-            raise ValueError('Data has not been converted yet. Please call convert() first.')
+            raise ValueError(
+                "Data has not been converted yet. Please call convert() first."
+            )
 
         gamma_in_rad = np.deg2rad(gamma_range)
         twotheta_in_rad = np.deg2rad(twotheta_range)
 
-        if not self.limits[0] <= twotheta_in_rad[0] <= self.limits[1] or \
-            not self.limits[0] <= twotheta_in_rad[1] <= self.limits[1] or \
-            not self.limits[2] <= gamma_in_rad[0] <= self.limits[3] or \
-            not self.limits[2] <= gamma_in_rad[1] <= self.limits[3]:
-            err = 'Specified range is outside the limits of the image.\n'
-            err += f'twotheta_range: {twotheta_range}, gamma_range: {gamma_range}\n'
-            err += f'image limits (deg): 2theta: {np.rad2deg(self.limits[0:2]).tolist()},' 
-            err += f'gamma: {np.rad2deg(self.limits[2:4]).tolist()}'
+        if (
+            not self.limits[0] <= twotheta_in_rad[0] <= self.limits[1]
+            or not self.limits[0] <= twotheta_in_rad[1] <= self.limits[1]
+            or not self.limits[2] <= gamma_in_rad[0] <= self.limits[3]
+            or not self.limits[2] <= gamma_in_rad[1] <= self.limits[3]
+        ):
+            err = "Specified range is outside the limits of the image.\n"
+            err += f"twotheta_range: {twotheta_range}, gamma_range: {gamma_range}\n"
+            err += (
+                f"image limits (deg): 2theta: {np.rad2deg(self.limits[0:2]).tolist()},"
+            )
+            err += f"gamma: {np.rad2deg(self.limits[2:4]).tolist()}"
             raise ValueError(err)
 
-        gamma_mask = (self.indexes[0] >= gamma_range[0]) & (self.indexes[0] <= gamma_range[1])
-        twoth_mask = (self.indexes[1] >= twotheta_range[0]) & (self.indexes[1] <= twotheta_range[1])
+        gamma_mask = (self.indexes[0] >= gamma_range[0]) & (
+            self.indexes[0] <= gamma_range[1]
+        )
+        twoth_mask = (self.indexes[1] >= twotheta_range[0]) & (
+            self.indexes[1] <= twotheta_range[1]
+        )
 
-        if mode == '2theta':
+        if mode == "2theta":
             sum_axis = 0
             int_index = self.indexes[1][twoth_mask]
             if bin_size is None:
                 bin_size = 1
-        elif mode == 'gamma':
+        elif mode == "gamma":
             sum_axis = 1
             int_index = self.indexes[0][gamma_mask]
             if bin_size is None:
                 bin_size = 2
         else:
-            raise ValueError(f'Unknown mode: {mode}')
-        
-        intensity_slice = np.sum(self.data_converted[gamma_mask, :][:, twoth_mask], axis=sum_axis)
+            raise ValueError(f"Unknown mode: {mode}")
+
+        intensity_slice = np.sum(
+            self.data_converted[gamma_mask, :][:, twoth_mask], axis=sum_axis
+        )
 
         # Remove invalid integration indices and values
         if isinstance(int_index, np.ma.MaskedArray):
             int_index = int_index[~np.ma.getmaskarray(intensity_slice)]
             intensity_slice = intensity_slice.compressed()
-        
-        if bin_size > 1:            
+
+        if bin_size > 1:
             # Bin the intensity data by summing values within angular ranges
             # np.histogram with weights sums the intensity values that fall
             # within each bin, effectively performing the binning operation
             intensity_binned, bin_edges = np.histogram(
-                int_index,                    # Angular values (x-axis)
+                int_index,  # Angular values (x-axis)
                 bins=len(int_index) // bin_size,
-                weights=intensity_slice       # Weight each bin contribution by its intensity value
+                weights=intensity_slice,  # Weight each bin contribution by its intensity value
             )
-            
+
             # Bin centers as final angular values
             int_index = (bin_edges[:-1] + bin_edges[1:]) / 2
             intensity_slice = intensity_binned
-        
+
         return (int_index, intensity_slice)
-    
+
     def integrate_2theta(self, twotheta_range=None, gamma_scale=0.2, int_dict={}):
         """Shortcut for integrate with mode='2theta'."""
         if twotheta_range is None:
             twotheta_range = (15, 12.5)
         alpha_deg = np.rad2deg(self.alpha)
         twotheta_lim = (alpha_deg - twotheta_range[0], alpha_deg + twotheta_range[1])
-        gamma_range = np.rad2deg([(self.limits[2] - self.chi) * gamma_scale + self.chi , (self.limits[3] - self.chi) * gamma_scale + self.chi])
+        gamma_range = np.rad2deg(
+            [
+                (self.limits[2] - self.chi) * gamma_scale + self.chi,
+                (self.limits[3] - self.chi) * gamma_scale + self.chi,
+            ]
+        )
 
         int_borders = self.plot_integration_borders(twotheta_lim, gamma_range)
-        int_res = self.integrate(twotheta_range=twotheta_lim, gamma_range=gamma_range, mode='2theta', **int_dict)
+        int_res = self.integrate(
+            twotheta_range=twotheta_lim,
+            gamma_range=gamma_range,
+            mode="2theta",
+            **int_dict,
+        )
         return (int_res, (twotheta_lim, gamma_range), int_borders)
 
     def integrate_gamma(self, twotheta_range, gamma_range=None, int_dict={}):
         """Shortcut for integrate with mode='gamma'."""
         if gamma_range is None:
             gamma_range = np.rad2deg(self.limits[2:4])
-        
-        (int_index, intensity_slice) = self.integrate(twotheta_range=twotheta_range, gamma_range=gamma_range, mode='gamma', **int_dict)
+
+        (int_index, intensity_slice) = self.integrate(
+            twotheta_range=twotheta_range,
+            gamma_range=gamma_range,
+            mode="gamma",
+            **int_dict,
+        )
 
         valid_mask = intensity_slice > 0
         int_index = int_index[valid_mask]
@@ -537,16 +627,22 @@ class AreaDetectorImage(object):
 
         int_borders = self.plot_integration_borders(twotheta_range, gamma_range)
 
-        return ((int_index, intensity_slice), (twotheta_range, gamma_range), int_borders)
-    
-if __name__ == '__main__':
+        return (
+            (int_index, intensity_slice),
+            (twotheta_range, gamma_range),
+            int_borders,
+        )
+
+
+if __name__ == "__main__":
     # usage example
     import matplotlib.pyplot as plt
     import sys
+
     try:
         f = sys.argv[1]
     except IndexError:
-        raise ValueError('please specify filename.')
+        raise ValueError("please specify filename.")
     areaimage = AreaDetectorImage(f)
     areaimage.convert()
     matrix_original = areaimage.image.data
@@ -554,14 +650,19 @@ if __name__ == '__main__':
     dx = areaimage.indexes[1][1] - areaimage.indexes[1][0]
     dy = areaimage.indexes[0][1] - areaimage.indexes[0][0]
     extent = (
-        areaimage.indexes[1][0]-dx/2, areaimage.indexes[1][-1]+dx/2,
-        areaimage.indexes[0][-1]-dy/2, areaimage.indexes[0][0]+dy/2
+        areaimage.indexes[1][0] - dx / 2,
+        areaimage.indexes[1][-1] + dx / 2,
+        areaimage.indexes[0][-1] - dy / 2,
+        areaimage.indexes[0][0] + dy / 2,
     )
-    im = plt.imshow(areaimage.data_converted,
-                interpolation='nearest',
-                vmin=0, vmax=10,
-                aspect='auto',
-                origin='upper',
-                extent=extent)
+    im = plt.imshow(
+        areaimage.data_converted,
+        interpolation="nearest",
+        vmin=0,
+        vmax=10,
+        aspect="auto",
+        origin="upper",
+        extent=extent,
+    )
     plt.colorbar()
     plt.show()
