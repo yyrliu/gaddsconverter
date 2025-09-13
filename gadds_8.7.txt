@@ -1,0 +1,125 @@
+ 8.7 Peaks > Integrate > Chi • 
+Perform chi integration in conic 
+region -> F(2T)
+ Menu Command: Peaks > Integrate > Chi
+ Accelerator: None
+ User Level: 1
+ SLAM Syntax: INTEGRATE /CHI $1 $2 $3 $4 
+/NORMAL=<n> /STEPSIZE=<n>
+ INTEGRATE /CHI will integrate a region along 
+the chi direction and plot the results as intensity 
+versus 2-theta. The resulting trace may be writ
+ten to a file using INTEGRATE /WRITE com
+mand, or inputted into the PEAKS /LOAD 
+command.
+ The area to integrate is defined by specifying 
+the 2-theta and chi range for the Debye-Scher
+rer cone. Chi zero is defined at 6 o'clock and 
+goes CCW. Interactively, the user may redefine 
+any of the integration region’s limits by selecting 
+the limit's line number (1 to 4) and then using 
+the cursor keys. The current integration region 
+limits are continuously updated and displayed 
+on the screen. While interactively modifying an 
+integration limit, the <ESC> key or right button 
+will restore the limit to its original value, while 
+the <ENTER> or left button will accepts the new 
+value for this limit. It is also feasible to move the 
+entire integration window by pressing the “M” 
+key, using the cursors to position a new center of 
+the integration window, then pressing the 
+<ENTER> key.
+ Once the integration window is defined, press
+ing <ENTER> will start the integration calcula
+tions and display the message:
+ Wait=Integrate; ESC,Other buttons=Quit
+ Normally, one waits for the calculations to finish 
+and to plot the resulting data trace; however, 
+should you wish to abort the procedure, press 
+<ESC>. If too few data points were calculated, 
+the command will terminate immediately. Other
+wise, the message below appears:
+ Warning—aborted early—Press ENTER to 
+continue, ESC to abort.
+ Pressing <ESC> will terminate the INTEGRATE 
+/CHI command immediately, while <ENTER> 
+will accept the truncated data trace from the par
+tially integrated window (the upper chi limit was 
+lowered) and display the trace.
+ While GADDS provides several methods of con
+verting frame images into raw spectra, you 
+should be familiar with the differences between 
+each method. Methods 0 and 4 are summations, 
+while methods 1, 2, 3, and 5 are normalized to a 
+ten pixel region.
+ 1. Sum pixels:
+ 2. Average pixel:
+ 3. Arc Length: (quick and dirty)
+ 4. Solid Angle:
+ 5. Bin Method
+ 6. Normalized Bin: (preferred)
+ Methods 0 to 3 are described later. They are 
+quick and dirty methods. In contrast, the bin 
+method produces the most accurate results, 
+although at a slower pace. The bin method will 
+produce narrower profiles (FWHMs), smoother 
+spectra, and improved relative intensities across 
+the spectra.
+ Bins are determined by the start, end and step
+size of the integration. Say you requested the 
+range 5 to 65 in 0.5 steps. The first bin covers 
+the range 4.75 to 5.25; the second bin covers 
+5.25 to 5.75; …; the last bin covers the range 
+64.75 to 65.25. The idea is to place all of the 
+observed intensity within each bin range into 
+that bin. Each frame pixel covers one or more 
+integration bins. The intensity of the each frame 
+pixel is divided into these integration bins, using 
+the fractional area as the weighting factor (eq. 
+1). The sum of all of the fractional areas for any 
+given pixel must equal one (eq. 2).
+ I
+  N
+ i = Σ InAn,i
+ n=1
+ eq. 1
+
+  M
+ 1.0 = Σ An,I
+  i=1
+ WhereI = Intensity
+ eq. 2.
+ i = integration bin number
+ n = frame pixel number
+ A = fractional area
+ N = total number of frame pixels
+ M = total number of integration bins
+ For speed considerations, the frame pixels at 
+the edges of the integration region are not han
+dled precisely. For chi integration, if the center of 
+the pixel lies within the specified chi integration 
+region, then the entire pixel is used. If the pixel 
+center is outside region, then the entire pixel is 
+unused. So narrow chi integration regions, less 
+than a pixel width, should not be used for chi 
+integration. For 2-theta integration, if the center 
+of the pixel lies within the specified 2-theta inte
+gration region, then the entire pixel is used. If 
+the pixel center is outside the region, but any 
+pixel corner is inside the 2-theta region, then ¼ 
+of the pixel is used. So narrow or zero width 2
+theta integration regions can be used for 2-theta 
+integration (needed for pole figure processing).
+ The normalized bin method varies from the 
+above, only by normalizing each bin by the total 
+fractional area of all pixels for that bin (eq. 3). 
+We scale the result by a factor of ten.
+ N               
+I
+  N
+ i = 10 [ Σ InAn,i 
+]/[ ΣAn,i
+ ]
+   n=1            
+eq. 3.
+  n = 1
