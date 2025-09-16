@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from math import pi
 import re
 from logging import getLogger
 
@@ -632,6 +633,203 @@ class AreaDetectorImage(object):
             (twotheta_range, gamma_range),
             int_borders,
         )
+
+    def integration_bin_method(
+        self,
+        twotheta_range,
+        gamma_range,
+        step=0.05,
+        axis="twotheta",
+        method="normalized_bin",
+        verbose=True,
+    ):
+        """
+        Perform chi integration using GADDS bin method or normalized bin method.
+
+        This implements the exact formulas from GADDS 8.7 documentation:
+        - Standard Bin Method: I_i = Σ(I_n * A_n,i)
+        - Normalized Bin Method: I_i = 10 * [Σ(I_n * A_n,i) / Σ(A_n,i)]
+
+        """
+
+        # All calculations are done in radians
+        gamma_range = np.deg2rad(gamma_range)
+        twotheta_range = np.deg2rad(twotheta_range)
+
+        if (
+            not self.limits[0] <= twotheta_range[0] <= self.limits[1]
+            or not self.limits[0] <= twotheta_range[1] <= self.limits[1]
+            or not self.limits[2] <= gamma_range[0] <= self.limits[3]
+            or not self.limits[2] <= gamma_range[1] <= self.limits[3]
+        ):
+            err = "Specified range is outside the limits of the image.\n"
+            err += f"twotheta_range: {twotheta_range}, gamma_range: {gamma_range}\n"
+            err += (
+                f"image limits (deg): 2theta: {np.rad2deg(self.limits[0:2]).tolist()},"
+            )
+            err += f"gamma: {np.rad2deg(self.limits[2:4]).tolist()}"
+            raise ValueError(err)
+
+        if verbose:
+            print(f"Starting {method} integration...")
+            print(
+                f"2θ range: {np.rad2deg(twotheta_range[0])}° to {np.rad2deg(twotheta_range[1])}° with {step}° steps"
+            )
+            print(
+                f"χ (gamma) range: {np.rad2deg(gamma_range[0]):.1f}° to {np.rad2deg(gamma_range[1]):.1f}°"
+            )
+            print(
+                f"Detector gamma limits: {np.rad2deg(self.limits[2]):.1f}° to {np.rad2deg(self.limits[3]):.1f}°"
+            )
+
+        # Get image dimensions and create pixel coordinate arrays
+        height, width = self.image.data.shape
+
+        # Create bin structure according to GADDS documentation
+        # Bins are: first bin 4.75-5.25, second bin 5.25-5.75, etc.
+        if axis == "twotheta":
+            num_bins = int((twotheta_range[1] - twotheta_range[0]) / step) + 1
+            bin_centers = np.linspace(twotheta_range[0], twotheta_range[1], num_bins)
+            bin_edges = np.concatenate(
+                [
+                    [bin_centers[0] - step / 2],  # Left edge of first bin
+                    bin_centers[:-1] + step / 2,  # Right edges become left edges
+                    [bin_centers[-1] + step / 2],  # Right edge of last bin
+                ]
+            )
+        elif axis == "gamma":
+            raise NotImplementedError("Gamma integration not implemented yet.")
+        else:
+            raise ValueError(f"Unknown axis: {axis}")
+
+        if verbose:
+            print(f"Created {num_bins} bins")
+            print(f"Bin edges: {bin_edges[0]:.3f} to {bin_edges[-1]:.3f}°")
+
+        # Initialize integration arrays
+        integrated_intensities = np.zeros(num_bins)
+        total_fractional_areas = np.zeros(num_bins)  # For normalized bin method
+
+        pixels_corners = np.zeros(
+            (4, height, width, 2)
+        )  # 4 corners, (row, col), (x, y)
+        # Calculate corners for all pixels
+        for dr, dc, corner_idx in [
+            (-0.5, -0.5, 0),  # Top-left
+            (-0.5, 0.5, 1),  # Top-right
+            (0.5, 0.5, 2),  # Bottom-right
+            (0.5, -0.5, 3),  # Bottom-left
+        ]:
+            r = np.arange(height)[:, None] + dr
+            c = np.arange(width)[None, :] + dc
+            pixels_corners[corner_idx, :, :, 0], pixels_corners[corner_idx, :, :, 1] = (
+                self.rowcol_to_angles(r, c)
+            )
+
+        pixels_corners = pixels_corners.reshape(
+            -1, 4, 2
+        )  # Shape: (N, 4, 2) # (row*col, 4 corners, (x, y))
+        intensities_flat = self.image.data.flatten()  # Shape: (N,)
+
+        # Filter pixels outside of gamma and twotheta ranges
+        rows_flat, cols_flat = np.indices((height, width))
+        pixels_centers = np.array(
+            self.rowcol_to_angles(rows_flat.flatten(), cols_flat.flatten())
+        ).reshape(-1, 2)  # Shape: (N, 2)
+        pixels_mask = (
+            (pixels_centers[:, 0] >= twotheta_range[0])
+            & (pixels_centers[:, 0] <= twotheta_range[1])
+            & (pixels_centers[:, 1] >= gamma_range[0])
+            & (pixels_centers[:, 1] <= gamma_range[1])
+        )
+
+        # Apply mask to filter pixels on pixels_corners
+        pixels_corners = pixels_corners[pixels_mask]
+        intensities_flat = intensities_flat[pixels_mask]
+
+        # Bin pixels on the all 4 corners
+        pixel_bin_indices = np.stack(
+            [
+                np.digitize(np.rad2deg(pixels_corners[:, corner_idx, 0]), bin_edges) - 1
+                for corner_idx in range(4)
+            ],
+            axis=1,
+        )  # Shape: (N, 4)
+
+        # Check if all corners fall into the same bin
+        bin_indices = pixel_bin_indices == pixel_bin_indices[:, 0]
+        same_bin_mask = np.all(bin_indices, axis=1)
+        straddle_mask = ~same_bin_mask
+
+        # For pixels fully in one bin, assign full intensity
+        np.add.at(
+            integrated_intensities,
+            bin_indices[same_bin_mask],
+            intensities_flat[same_bin_mask],
+        )
+        np.add.at(total_fractional_areas, bin_indices[same_bin_mask], 1.0)
+
+        # For straddling pixels, super-sample to estimate fractional areas
+        if np.any(straddle_mask):
+            if verbose:
+                print(
+                    f"Handling {np.sum(straddle_mask)} straddling pixels with super-sampling"
+                )
+            ss_factor = 5  # Super-sampling factor
+            ss_offsets = np.linspace(
+                -0.5 + 1 / (2 * ss_factor), 0.5 - 1 / (2 * ss_factor), ss_factor
+            )
+            ss_grid = np.array(np.meshgrid(ss_offsets, ss_offsets)).T.reshape(
+                -1, 2
+            )  # Shape: (ss_factor^2, 2)
+
+            for idx in np.where(straddle_mask)[0]:
+                pixel_corners = pixels_corners[idx]  # Shape: (4, 2)
+                intensity = intensities_flat[idx]
+
+                # Generate super-sampled points within the pixel
+                ss_points = np.array(
+                    [
+                        (1 - sx) * (1 - sy) * pixel_corners[0]
+                        + sx * (1 - sy) * pixel_corners[1]
+                        + sx * sy * pixel_corners[2]
+                        + (1 - sx) * sy * pixel_corners[3]
+                        for sx, sy in ss_grid
+                    ]
+                )  # Shape: (ss_factor^2, 2)
+
+                # Determine bins for super-sampled points
+                ss_bin_indices = np.digitize(np.rad2deg(ss_points[:, 0]), bin_edges) - 1
+
+                # Count occurrences in each bin
+                unique_bins, counts = np.unique(ss_bin_indices, return_counts=True)
+                fractional_areas = counts / (ss_factor**2)
+
+                # Update integrated intensities and total fractional areas
+                np.add.at(
+                    integrated_intensities, unique_bins, intensity * fractional_areas
+                )
+                np.add.at(total_fractional_areas, unique_bins, fractional_areas)
+
+        # Apply method-specific processing
+        if method == "normalized_bin":
+            # Equation 3: I_i = 10 * [Σ(I_n * A_n,i) / Σ(A_n,i)]
+            valid_bins = total_fractional_areas > 0
+            integrated_intensities[valid_bins] = (
+                10.0
+                * integrated_intensities[valid_bins]
+                / total_fractional_areas[valid_bins]
+            )
+            if verbose:
+                print("Applied normalized bin method (Equation 3)")
+        elif method == "bin":
+            # Equation 1: I_i = Σ(I_n * A_n,i) - no additional processing needed
+            if verbose:
+                print("Applied standard bin method (Equation 1)")
+        else:
+            raise ValueError(f"Unknown method: {method}. Use 'bin' or 'normalized_bin'")
+
+        return bin_centers, integrated_intensities
 
 
 if __name__ == "__main__":
