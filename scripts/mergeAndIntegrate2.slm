@@ -1,0 +1,74 @@
+!to run, enter following SLAM command in GADDS cmd line:
+!@C:\robot\scripts\mergeAndIntegrate2.slm [job name] [frame width] [theta1+theta2]
+!%1 = job name
+!%2 = frame width
+!%3 = theta1 + theta2 for initial frame (30 = 20+15)
+
+! -------------------------------------
+! Integrate all frames
+#on error then continue
+! Targets A01 to A12
+#let %R = "A01"
+#while ('%R' <= "A12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+
+! Targets B01 to B12
+#let %R = "B01"
+#while ('%R' <= "B12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+
+! Targets C01 to C12
+#let %R = "C01"
+#while ('%R' <= "C12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+
+! Targets D01 to D12
+#let %R = "D01"
+#while ('%R' <= "D12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+
+! Targets E01 to E12
+#let %R = "E01"
+#while ('%R' <= "E12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+
+! Targets F01 to F12
+#let %R = "F01"
+#while ('%R' <= "F12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+
+! Targets G01 to G12
+#let %R = "G01"
+#while ('%R' <= "G12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+! Targets H01 to H12
+#let %R = "H01"
+#while ('%R' <= "H12") do
+  @C:\robot\scripts\96wellssub2.slm %1 %R %2 %3
+#inc %R
+#wend
+
+ECHO "END OF SCRIPT"
+WAIT 1
+MENUMODE

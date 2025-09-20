@@ -1,0 +1,71 @@
+! Nested script file used by 96wells.slm
+! Updated to make independent of 2Theta, #of Frames
+!
+! %1 = jobname
+! %2 = run (A01, A02, B01, etc)
+! %3 = frame width
+! %4 = initial 2Theta (Theta1 + Theta2)
+
+! integration window is 2Theta +/- 12.5
+
+! If frame doesn't exist, we exit
+! processing this frame
+
+
+
+! load and integrate 1st frame
+display /new '%1'_'%2'_000.gfrm
+
+!%F = frame # (starts with 0)
+#LET %F = 0
+
+
+#WHILE (TRUE) DO
+	#on error then break
+
+	!%S = frame step
+	#LET %S = '%F'*'%3'
+	ECHO "S = " %S
+	!WAIT 1
+	!%T = base 2theta for integration
+	#LET %T = '%4' + '%S'
+	ECHO "T = " %T
+	!WAIT 1
+	!%U, %V = min, max 2theta for integration
+	#LET %U = '%T'-15
+	#LET %V = '%T'+15
+
+	! calculate delta chi (%C)
+	#LET %C = 0.2*'%T'
+	#LET %C = 22.5-'%C'
+	!%D, %E = chi limits
+	#LET %D = -90 - '%C'
+	#LET %E = -90 + '%C'
+	!ECHO "D/E = " %D %E 
+	!WAIT 2
+
+ 	INTEGRATE /CHI '%U' '%V' '%D' '%E' /NORMAL=5 /STEPSIZE=0.050
+	!WAIT 3
+	INTEGRATE /WRITE '%1'_'%2' &
+	/FILENAME=$BASENAME &
+	/FORMAT=DIFFRACplus /SCALE=1.0 /APPEND
+
+	! load and integrate 2nd frame
+	DISPLAY /NEXT
+
+	#INC %F
+#WEND
+
+ECHO "END OF WHILE LOOP"
+
+! Now merge the two ranges into a single
+! range
+
+!UNCOMMENT 2 LINES BELOW TO MERGE
+system "c:\saxi\gaddsnew\merge /b &
+'%1'_'%2'.raw '%1'_'%2'_merge.raw"
+
+! Note: If the scan parameters are
+! changed, the integration range (2theta
+! start-end, Chi start-end) also needs to
+! be changed to the correct values.

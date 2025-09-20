@@ -1,0 +1,33 @@
+!to run, enter following SLAM command in GADDS cmd line:
+!@C:\robot\scripts\run96wellPlate.slm [%1] [%2] [%3] ... [%9]
+
+! using the parameters below:
+!__________________________
+! %1 - base name for file names 
+! %2 - scan time
+! %3 - title
+! %4 - sample name / plate ID
+! %5 - sample number / barcode
+! %6 - number of frames
+! %7 - frame width
+! %8 - theta1
+! %9 - theta2
+
+
+scan /multitargets %6 /theta1=%8 &
+  /theta2=%9 %1 /scantime=%2 /axis=1 &
+  /width=%7 /title=%3 /sample=%4 &
+  /numsample=%5 /clear /startrun=1 &
+  /endrun=9999 /mode=step /OSCILLATE=None &
+  /AMPLITUDE=0. /VIDEO /DISPLAY=15 &
+  /REALTIME /AUTOZALIGN
+! -------------------------------------
+! Integrate and merge all frames
+
+
+#LET %T = '%8' + '%9'
+ECHO "T = " %T
+WAIT 2
+@C:\robot\scripts\mergeAndIntegrate2.slm %1 %7 %T
+
+MENUMODE
